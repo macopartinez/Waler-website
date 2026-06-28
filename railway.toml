@@ -1,9 +1,9 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install && npm run build"
+buildCommand = "NODE_ENV=development npm install && npm run build"
 
 [deploy]
-startCommand = "npm run start"
+startCommand = "node dist/index.cjs"
 healthcheckPath = "/api/health"
 restartPolicyType = "on_failure"
 
