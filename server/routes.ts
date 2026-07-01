@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import Database from "better-sqlite3";
 import path from "path";
+import { fileURLToPath } from "url";
 import crypto from "crypto";
 import { encryptField, decryptField, decryptMessageRow } from "./crypto-fields";
 import { loginSchema, registerSchema, verifyCodeSchema, unfollowers, blockers, users, subscriptions, planChangeHistory, followers as followersTable, agentStates } from "@shared/schema";
@@ -32,6 +33,13 @@ import { getActivePlans, getUserPlan, getPlanById, getPlanByName, upsertSubscrip
 import { createVerificationCode } from './verification-codes';
 import type Stripe from "stripe";
 import fs from 'fs';
+
+// esbuild ne polyfille PAS `import.meta.dirname` pour le format CJS (bundle de
+// prod) : la propriété reste `undefined`, ce qui casse tous les chemins vers
+// waler.db. `__dirname` existe nativement dans le bundle CJS de prod, et à
+// défaut (ESM, dev via tsx) on retombe sur `import.meta.url`.
+const moduleDir =
+  typeof __dirname !== "undefined" ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Pont waler.db ↔ comptes (app_users). Un compte Instagram = une ligne `users`
@@ -1631,7 +1639,7 @@ export async function registerRoutes(
 
       // Sauvegarder le prospect dans circle_members
       const prospectId = Date.now();
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Rattacher la personne au COMPTE CHOISI dans le dashboard, pas au compte
@@ -1715,7 +1723,7 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, message: "Instagram username required" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Isolation stricte : on supprime UNIQUEMENT dans le bucket du compte visé.
@@ -1775,7 +1783,7 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, message: "Username required" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Même compte que l'insertion (analyze-person), isolation stricte : statut
@@ -1939,7 +1947,7 @@ export async function registerRoutes(
       let recovered = 0;
 
       // SQLite pour émettre les signaux Pro (follow / refollow) sur les fiches suivies.
-      const sqlite = new Database(path.join(import.meta.dirname, "waler.db"));
+      const sqlite = new Database(path.join(moduleDir, "waler.db"));
       try {
         for (const follower of followers) {
           try {
@@ -2141,7 +2149,7 @@ export async function registerRoutes(
         userId = requestedAccountId;
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Résolution PAR USERNAME (priorité maximale) : les id Supabase (auth) et
@@ -2212,7 +2220,7 @@ export async function registerRoutes(
     try {
       let userId = getActiveAccount(req);
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Stats du COMPTE affiché dans le dashboard (et non du compte de session de
@@ -2434,7 +2442,7 @@ export async function registerRoutes(
       );
       const accountIds = accounts.map((a) => a.id);
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // La table peut ne pas exister si aucun run n'a eu lieu.
@@ -2496,7 +2504,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "compte invalide" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
       try {
         sqlite.prepare(
@@ -2531,11 +2539,11 @@ export async function registerRoutes(
       // Sauvegarde PostgreSQL + émission des signaux Pro (timeline + score).
       if (pgPool) {
         // SQLite = signaux Pro (best-effort). Son ouverture ne doit JAMAIS bloquer
-        // la sauvegarde Postgres (sur certains déploiements le FS/`import.meta.dirname`
+        // la sauvegarde Postgres (sur certains déploiements le FS/`moduleDir`
         // peut faire échouer `new Database()` → ça nuquait toute la sauvegarde).
         let sqlite: any = null;
         try {
-          sqlite = new Database(path.join(import.meta.dirname, "waler.db"));
+          sqlite = new Database(path.join(moduleDir, "waler.db"));
         } catch (e: any) {
           console.error("⚠️ SQLite indisponible (signaux Pro ignorés, sauvegarde PG maintenue):", e?.message);
         }
@@ -2628,7 +2636,7 @@ export async function registerRoutes(
       }
 
       // Upsert contact score in database
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // BUCKET du compte : `circle_members`/`contact_scores` sont clés par l'id
@@ -2734,7 +2742,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
       const result = sqlite.prepare(`
         UPDATE circle_members
@@ -2776,7 +2784,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "contactUsername required" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Cibler le bucket du compte concerné (l'id Supabase de session peut différer
@@ -2901,7 +2909,7 @@ export async function registerRoutes(
         }
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Colonne pour la séquence d'engagement (timeline streak avec ruptures).
@@ -3133,7 +3141,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const result = sqlite.prepare(`
@@ -3183,7 +3191,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Get suggestion
@@ -3272,7 +3280,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const suggestions = sqlite.prepare(`
@@ -3310,7 +3318,7 @@ export async function registerRoutes(
 
       const { contactUsername, fromCategory, toCategory, score, triggerType, notes } = req.body;
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       sqlite.prepare(`
@@ -3355,7 +3363,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid messages data" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       let insertedMessages = 0;
@@ -3461,7 +3469,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const conversations = (sqlite.prepare(`
@@ -3495,7 +3503,7 @@ export async function registerRoutes(
 
       const { username } = req.params;
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const rows = sqlite.prepare(`
@@ -3533,7 +3541,7 @@ export async function registerRoutes(
 
       const { username } = req.params;
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const stats = sqlite.prepare(`
@@ -3570,7 +3578,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Pending suggestions
@@ -3626,7 +3634,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const suggestions = sqlite.prepare(`
@@ -3658,7 +3666,7 @@ export async function registerRoutes(
 
       const { suggestionId, action, reason } = req.body;
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const suggestion = sqlite.prepare(`
@@ -3726,7 +3734,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const scores = sqlite.prepare(`
@@ -3753,7 +3761,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Category distribution
@@ -3824,7 +3832,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const conversations = (sqlite.prepare(`
@@ -3856,7 +3864,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const dmCount = sqlite.prepare(`
@@ -3898,7 +3906,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Créer table si n'existe pas
@@ -3955,7 +3963,7 @@ export async function registerRoutes(
 
       const { dmCollection, scoreCalculation, dataStorage, analytics } = req.body;
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       sqlite.prepare(`
@@ -3997,7 +4005,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Collecter toutes les données (déchiffrées pour la portabilité RGPD)
@@ -4057,7 +4065,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Supprimer toutes les données
@@ -4090,7 +4098,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const configs = sqlite.prepare(`
@@ -4116,7 +4124,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const contacts = sqlite.prepare(`
@@ -4145,7 +4153,7 @@ export async function registerRoutes(
 
       const { contactUsername, category, checkInterval, priority } = req.body;
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Calculer next_check_at
@@ -4185,7 +4193,7 @@ export async function registerRoutes(
 
       const { contactUsername, category, status, changesDetected, details, durationMs } = req.body;
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       sqlite.prepare(`
@@ -4215,7 +4223,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const alerts = sqlite.prepare(`
@@ -4243,7 +4251,7 @@ export async function registerRoutes(
 
       const { alertId } = req.params;
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       sqlite.prepare(`
@@ -4269,7 +4277,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       const statsByCategory = sqlite.prepare(`
@@ -4310,7 +4318,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Récupérer tous les contacts avec scores
@@ -4382,7 +4390,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Missing contact username" });
       }
 
-      const dbPath = path.join(import.meta.dirname, "waler.db");
+      const dbPath = path.join(moduleDir, "waler.db");
       const sqlite = new Database(dbPath);
 
       // Récupérer les messages (déchiffrés pour l'analyse de scoring)
