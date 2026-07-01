@@ -10,9 +10,6 @@ interface NavBarProps {
   center?: ReactNode;
   /** Right-aligned actions (CTAs, account switcher, logout…). */
   actions?: ReactNode;
-  /** Pin the logo to the old top-left corner (absolute 15px/15px) instead of
-   *  letting it sit vertically centered inside the max-w-7xl flex row. */
-  pinLogo?: boolean;
 }
 
 /**
@@ -22,15 +19,15 @@ interface NavBarProps {
  * on narrow screens: the logo, the optional center cluster and the actions live
  * in a single responsive flex row so they shrink instead of overlapping.
  */
-export function NavBar({ logoSize = 32, center, actions, pinLogo = false }: NavBarProps) {
+export function NavBar({ logoSize = 32, center, actions }: NavBarProps) {
   const [, navigate] = useLocation();
 
   return (
     <nav className="fixed w-full top-0 z-50 bg-transparent">
-      <div className={`relative ${pinLogo ? "w-full" : "max-w-7xl mx-auto"} px-4 sm:px-6 h-20 flex items-center justify-between gap-2`}>
+      <div className="relative w-full px-4 sm:px-6 h-20 flex items-center justify-between gap-2">
         <button
           onClick={() => navigate("/")}
-          className={pinLogo ? "shrink-0 md:absolute md:left-[15px] md:top-[15px] md:z-10" : "shrink-0"}
+          className="shrink-0"
           aria-label="Waler home"
           data-testid="link-home"
         >
@@ -44,7 +41,7 @@ export function NavBar({ logoSize = 32, center, actions, pinLogo = false }: NavB
         )}
 
         {actions && (
-          <div className={`flex items-center gap-2 sm:gap-3 shrink-0${pinLogo ? " md:ml-auto" : ""}`}>{actions}</div>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">{actions}</div>
         )}
       </div>
     </nav>
