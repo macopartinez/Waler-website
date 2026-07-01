@@ -10,6 +10,9 @@ import { RadarBackground } from '@/components/RadarBackground';
 import { usePlans, useUserPlan, useCreateCheckout, useCustomerPortal } from '@/hooks/use-subscription';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage, interpolate } from '@/contexts/LanguageContext';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import type { Translations } from '@/lib/i18n/en';
 
 type BillingPeriod = 'monthly' | 'yearly';
 
@@ -26,25 +29,26 @@ function formatDate(value: string | Date | null | undefined): string {
 }
 
 // Statut Stripe → libellé + couleur lisibles.
-function statusBadge(status: string | null | undefined): { label: string; className: string } {
+function statusBadge(status: string | null | undefined, t: Translations): { label: string; className: string } {
   switch (status) {
     case 'active':
-      return { label: 'Active', className: 'bg-[#02c950]/15 border-[#02c950]/40 text-[#02c950]' };
+      return { label: t.billing.status.active, className: 'bg-[#02c950]/15 border-[#02c950]/40 text-[#02c950]' };
     case 'trialing':
-      return { label: 'Free trial', className: 'bg-[#02c950]/15 border-[#02c950]/40 text-[#02c950]' };
+      return { label: t.billing.status.trialing, className: 'bg-[#02c950]/15 border-[#02c950]/40 text-[#02c950]' };
     case 'past_due':
-      return { label: 'Payment due', className: 'bg-amber-500/15 border-amber-500/40 text-amber-400' };
+      return { label: t.billing.status.pastDue, className: 'bg-amber-500/15 border-amber-500/40 text-amber-400' };
     case 'canceled':
-      return { label: 'Canceled', className: 'bg-red-500/15 border-red-500/40 text-red-400' };
+      return { label: t.billing.status.canceled, className: 'bg-red-500/15 border-red-500/40 text-red-400' };
     case 'incomplete':
     case 'incomplete_expired':
-      return { label: 'Incomplete', className: 'bg-amber-500/15 border-amber-500/40 text-amber-400' };
+      return { label: t.billing.status.incomplete, className: 'bg-amber-500/15 border-amber-500/40 text-amber-400' };
     default:
-      return { label: 'Free', className: 'bg-white/10 border-white/20 text-gray-300' };
+      return { label: t.billing.status.free, className: 'bg-white/10 border-white/20 text-gray-300' };
   }
 }
 
 export default function Billing() {
+  const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { trialEndsAt, isTrialActive } = useSubscription();
@@ -64,7 +68,7 @@ export default function Billing() {
   );
 
   const loading = plansLoading || userPlanLoading;
-  const badge = statusBadge(subscription?.status);
+  const badge = statusBadge(subscription?.status, t);
 
   // Plans triés Base puis Pro pour un comparatif stable.
   const orderedPlans = [...(plans ?? [])].sort((a, b) =>
@@ -92,8 +96,8 @@ export default function Billing() {
     const priceId = period === 'yearly' ? plan.stripePriceIdYearly : plan.stripePriceIdMonthly;
     if (!priceId) {
       toast({
-        title: 'Unavailable',
-        description: 'This plan is not available for checkout yet. Please try again later.',
+        title: t.billing.unavailableToast.title,
+        description: t.billing.unavailableToast.description,
         variant: 'destructive',
       });
       return;
@@ -115,10 +119,10 @@ export default function Billing() {
             className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
-            Back to Dashboard
+            {t.billing.backToDashboard}
           </button>
           <GlassText text="WALER" fontSize={32} />
-          <div className="w-32" />
+          <LanguageSwitcher />
         </div>
       </nav>
 
@@ -128,18 +132,18 @@ export default function Billing() {
           <div className="mb-10">
             <div className="inline-flex items-center gap-2 bg-[#02c950]/10 border border-[#02c950]/30 rounded-full px-4 py-2 mb-4">
               <CreditCard className="w-4 h-4 text-[#02c950]" />
-              <span className="text-[#02c950] font-semibold text-sm">Plans &amp; Billing</span>
+              <span className="text-[#02c950] font-semibold text-sm">{t.billing.badge}</span>
             </div>
-            <h1 className="text-4xl font-bold text-gradient">Manage your subscription</h1>
+            <h1 className="text-4xl font-bold text-gradient">{t.billing.title}</h1>
             <p className="text-gray-400 text-lg mt-2 max-w-2xl">
-              Review your current plan, update your billing, and switch plans whenever you need.
+              {t.billing.subtitle}
             </p>
           </div>
 
           {loading ? (
             <div className="flex items-center justify-center py-32 text-gray-400">
               <Loader2 className="w-6 h-6 animate-spin mr-3" />
-              Loading your subscription…
+              {t.billing.loadingSubscription}
             </div>
           ) : (
             <>
@@ -161,7 +165,7 @@ export default function Billing() {
                     <div>
                       <div className="flex items-center gap-3">
                         <h2 className="text-2xl font-bold text-white">
-                          {currentPlan?.displayName ?? 'Free'} plan
+                          {interpolate(t.billing.planNameLabel, { plan: currentPlan?.displayName ?? t.billing.freePlan })}
                         </h2>
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${badge.className}`}>
                           {badge.label}
@@ -171,10 +175,10 @@ export default function Billing() {
                         {currentPrice != null ? (
                           <>
                             <span className="text-white font-semibold">{formatPrice(currentPrice)}€</span>
-                            {' '}/ {subscription?.billingPeriod === 'monthly' ? 'month' : 'year'}
+                            {' '}/ {subscription?.billingPeriod === 'monthly' ? t.billing.perMonth : t.billing.perYear}
                           </>
                         ) : (
-                          'No active paid subscription'
+                          t.billing.noActiveSubscription
                         )}
                       </p>
                     </div>
@@ -188,7 +192,7 @@ export default function Billing() {
                         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 text-white transition-colors disabled:opacity-50"
                       >
                         {portal.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                        Manage payment &amp; invoices
+                        {t.billing.managePayment}
                         <ExternalLink className="w-3.5 h-3.5 text-gray-400" />
                       </button>
                     )}
@@ -199,39 +203,39 @@ export default function Billing() {
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <DetailTile
                     icon={<Calendar className="w-4 h-4 text-[#02c950]" />}
-                    label={subscription?.cancelAtPeriodEnd ? 'Access until' : 'Next renewal'}
+                    label={subscription?.cancelAtPeriodEnd ? t.billing.detail.accessUntil : t.billing.detail.nextRenewal}
                     value={formatDate(subscription?.currentPeriodEnd)}
                   />
                   <DetailTile
                     icon={<RefreshCw className="w-4 h-4 text-[#02c950]" />}
-                    label="Billing period"
+                    label={t.billing.detail.billingPeriod}
                     value={
                       subscription?.billingPeriod
                         ? subscription.billingPeriod === 'monthly'
-                          ? 'Monthly'
-                          : 'Yearly'
+                          ? t.billing.detail.monthly
+                          : t.billing.detail.yearly
                         : '—'
                     }
                   />
                   <DetailTile
                     icon={<Users className="w-4 h-4 text-[#02c950]" />}
-                    label="Tracked accounts"
+                    label={t.billing.detail.trackedAccounts}
                     value={
                       currentPlan
                         ? currentPlan.maxAccounts === 0
-                          ? 'Unlimited'
-                          : `Up to ${currentPlan.maxAccounts}`
+                          ? t.billing.detail.unlimited
+                          : interpolate(t.billing.detail.upTo, { count: currentPlan.maxAccounts })
                         : '—'
                     }
                   />
                   <DetailTile
                     icon={<Clock className="w-4 h-4 text-[#02c950]" />}
-                    label="History"
+                    label={t.billing.detail.history}
                     value={
                       currentPlan
                         ? currentPlan.maxHistoryDays === 0
-                          ? 'Unlimited'
-                          : `${currentPlan.maxHistoryDays} days`
+                          ? t.billing.detail.unlimited
+                          : interpolate(t.billing.detail.days, { count: currentPlan.maxHistoryDays })
                         : '—'
                     }
                   />
@@ -242,9 +246,7 @@ export default function Billing() {
                   <div className="mt-6 flex items-center gap-3 rounded-xl border border-[#02c950]/30 bg-[#02c950]/10 px-4 py-3">
                     <Sparkles className="w-5 h-5 text-[#02c950] flex-shrink-0" />
                     <p className="text-sm text-gray-200">
-                      You're on a free trial until{' '}
-                      <span className="font-semibold text-white">{formatDate(trialEndsAt)}</span>. You won't be
-                      charged before then.
+                      {interpolate(t.billing.trialBanner, { date: formatDate(trialEndsAt) })}
                     </p>
                   </div>
                 )}
@@ -254,15 +256,14 @@ export default function Billing() {
                   <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
                     <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
                     <p className="text-sm text-gray-200 flex-1 min-w-[12rem]">
-                      Your subscription is set to cancel on{' '}
-                      <span className="font-semibold text-white">{formatDate(subscription.currentPeriodEnd)}</span>.
+                      {interpolate(t.billing.cancellationBanner, { date: formatDate(subscription.currentPeriodEnd) })}
                     </p>
                     <button
                       onClick={() => portal.mutate()}
                       disabled={busy}
                       className="text-sm font-semibold text-amber-300 hover:text-amber-200 underline underline-offset-2 disabled:opacity-50"
                     >
-                      Reactivate
+                      {t.billing.reactivate}
                     </button>
                   </div>
                 )}
@@ -271,11 +272,11 @@ export default function Billing() {
               {/* Switch plan section */}
               <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-white">Switch plan</h2>
+                  <h2 className="text-2xl font-bold text-white">{t.billing.switchPlan.title}</h2>
                   <p className="text-gray-400 text-sm mt-1">
                     {hasActiveSub
-                      ? 'Changes are applied through our secure billing portal with prorated pricing.'
-                      : 'Choose a plan to get started.'}
+                      ? t.billing.switchPlan.subtitleWithSub
+                      : t.billing.switchPlan.subtitleNoSub}
                   </p>
                 </div>
 
@@ -287,7 +288,7 @@ export default function Billing() {
                       billingPeriod === 'monthly' ? 'bg-[#02c950] text-black' : 'text-gray-400 hover:text-white'
                     }`}
                   >
-                    Monthly
+                    {t.billing.detail.monthly}
                   </button>
                   <button
                     onClick={() => setBillingPeriod('yearly')}
@@ -295,7 +296,7 @@ export default function Billing() {
                       billingPeriod === 'yearly' ? 'bg-[#02c950] text-black' : 'text-gray-400 hover:text-white'
                     }`}
                   >
-                    Yearly
+                    {t.billing.detail.yearly}
                     <span className="absolute -top-2 -right-2 bg-[#02c950] text-black text-[10px] font-bold px-2 py-0.5 rounded-full">
                       -20%
                     </span>
@@ -325,7 +326,7 @@ export default function Billing() {
                       {isCurrent && (
                         <div className="absolute top-4 right-4 inline-flex items-center gap-1.5 bg-[#02c950]/15 border border-[#02c950]/40 text-[#02c950] px-3 py-1.5 rounded-full text-xs font-bold">
                           <Check className="w-3.5 h-3.5" />
-                          Current plan
+                          {t.billing.currentPlan}
                         </div>
                       )}
 
@@ -338,11 +339,11 @@ export default function Billing() {
                       <div className="mb-6">
                         <div className="flex items-baseline gap-2">
                           <span className="text-5xl font-black text-white">{formatPrice(price)}€</span>
-                          <span className="text-gray-400">/{billingPeriod === 'monthly' ? 'month' : 'year'}</span>
+                          <span className="text-gray-400">/{billingPeriod === 'monthly' ? t.billing.perMonth : t.billing.perYear}</span>
                         </div>
                         {billingPeriod === 'yearly' && (
                           <p className="text-sm text-[#02c950] mt-1">
-                            Save {formatPrice(plan.priceMonthly * 12 - plan.priceYearly)}€ vs monthly
+                            {interpolate(t.billing.saveVsMonthly, { amount: formatPrice(plan.priceMonthly * 12 - plan.priceYearly) })}
                           </p>
                         )}
                       </div>
@@ -360,7 +361,7 @@ export default function Billing() {
 
                       {isCurrent ? (
                         <div className="w-full py-3 rounded-xl font-bold text-center bg-white/10 text-white">
-                          Your current plan
+                          {t.billing.yourCurrentPlan}
                         </div>
                       ) : (
                         <button
@@ -373,7 +374,7 @@ export default function Billing() {
                           }`}
                         >
                           {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-                          {hasActiveSub ? `Switch to ${plan.displayName}` : `Choose ${plan.displayName}`}
+                          {hasActiveSub ? interpolate(t.billing.switchTo, { plan: plan.displayName }) : interpolate(t.billing.chooseButton, { plan: plan.displayName })}
                         </button>
                       )}
                     </motion.div>
@@ -385,15 +386,15 @@ export default function Billing() {
               <div className="mt-12 flex flex-wrap justify-center gap-8 text-gray-400">
                 <div className="flex items-center gap-2">
                   <Shield className="w-5 h-5" />
-                  <span>Secure payment by Stripe</span>
+                  <span>{t.billing.trust.securePayment}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <RefreshCw className="w-5 h-5" />
-                  <span>Cancel anytime</span>
+                  <span>{t.billing.trust.cancelAnytime}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CreditCard className="w-5 h-5" />
-                  <span>Prorated upgrades &amp; downgrades</span>
+                  <span>{t.billing.trust.proratedChanges}</span>
                 </div>
               </div>
             </>

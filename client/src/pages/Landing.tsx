@@ -8,15 +8,17 @@ import { useLocation } from "wouter";
 import { AnalyticsPreview } from "@/components/AnalyticsPreview";
 import { ConnectDialog } from "@/components/ConnectDialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // Étapes du process complet : scan → détection → identification (anonymisée)
-const DETECTION_STEPS = [
-  { label: "Scanning your followers", Icon: Search },
-  { label: "Change detected", Icon: TrendingDown },
-  { label: "Unfollower identified", Icon: UserMinus },
-];
+const DETECTION_ICONS = [Search, TrendingDown, UserMinus];
 
 function BrowserNotification() {
+  const { t } = useLanguage();
+  const DETECTION_STEPS = t.landing.browserDemo.steps.map((label, i) => ({
+    label,
+    Icon: DETECTION_ICONS[i],
+  }));
   const [followers, setFollowers] = useState(1248);
   // phase: -1 = caché, 0..2 = étape en cours, 3 = terminé (carte maintenue)
   const [phase, setPhase] = useState(-1);
@@ -74,17 +76,17 @@ function BrowserNotification() {
               <div className="flex gap-4">
                 <div>
                   <div className="text-white font-bold text-sm leading-none">86</div>
-                  <div className="text-[9px] text-white/60 mt-0.5">posts</div>
+                  <div className="text-[9px] text-white/60 mt-0.5">{t.landing.browserDemo.posts}</div>
                 </div>
                 <div>
                   <div className="text-white font-bold text-sm leading-none tabular-nums transition-all duration-300">
                     {followers.toLocaleString("en-US")}
                   </div>
-                  <div className="text-[9px] text-white/60 mt-0.5">followers</div>
+                  <div className="text-[9px] text-white/60 mt-0.5">{t.landing.browserDemo.followers}</div>
                 </div>
                 <div>
                   <div className="text-white font-bold text-sm leading-none">312</div>
-                  <div className="text-[9px] text-white/60 mt-0.5">following</div>
+                  <div className="text-[9px] text-white/60 mt-0.5">{t.landing.browserDemo.following}</div>
                 </div>
               </div>
             </div>
@@ -109,7 +111,7 @@ function BrowserNotification() {
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-[18px] h-[18px] rounded-[5px] bg-[#02c950] flex items-center justify-center text-[11px] font-black text-black">W</div>
                 <div className="text-[13px] font-semibold text-white">Waler</div>
-                <div className="ml-auto text-[11px] text-white/40">now</div>
+                <div className="ml-auto text-[11px] text-white/40">{t.landing.browserDemo.now}</div>
               </div>
 
               <div className="space-y-2">
@@ -165,10 +167,11 @@ function BrowserNotification() {
 }
 
 export default function Landing() {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [, navigate] = useLocation();
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const words = ["personal", "networker", "mentor", "professional", "closer"];
+  const words = t.landing.hero.words;
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -192,14 +195,14 @@ export default function Landing() {
               className="text-sm font-bold text-white hover:text-white/80 transition-colors order-1 sm:order-none"
               data-testid="button-login"
             >
-              Welcome Back
+              {t.landing.nav.login}
             </button>
             <button
               onClick={() => navigate("/onboard")}
               className="text-sm sm:text-base font-bold px-4 sm:px-6 py-2.5 rounded-full transition-all duration-300 bg-[#02c950]/20 backdrop-blur-md border border-white/20 hover:shadow-[0_0_20px_rgba(2,201,80,0.4)] hover:bg-[#02c950]/30 text-white whitespace-nowrap"
               data-testid="button-start-tracking"
             >
-              Begin Your Journey
+              {t.landing.nav.cta}
             </button>
           </>
         }
@@ -211,8 +214,8 @@ export default function Landing() {
               and flicker against the static hero painted from index.html. */}
           <div className="text-paper">
             <h1 className="text-6xl md:text-8xl font-display font-black leading-[1] mb-8 text-white tracking-tighter">
-              The first relationship <br />
-              clarity tool for{" "}
+              {t.landing.hero.titleLine1} <br />
+              {t.landing.hero.titlePrefix}{" "}
               <span className="inline-block w-[280px] md:w-[520px] whitespace-nowrap align-bottom">
                 <AnimatePresence mode="wait">
                   <motion.span
@@ -229,7 +232,7 @@ export default function Landing() {
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-gray-400 mb-12 max-w-3xl mx-auto leading-relaxed font-medium">
-              Waler detects when someone close leaves your digital circle — and guides you through what it really means about you and your relationship.
+              {t.landing.hero.subtitle}
             </p>
           </div>
         </div>
@@ -244,32 +247,17 @@ export default function Landing() {
           >
             <div className="text-center mb-16 text-paper">
               <h2 className="text-4xl md:text-6xl font-display font-black mb-6 text-white tracking-tighter">
-                How it <span className="text-gradient">works</span>
+                {t.landing.howItWorks.title} <span className="text-gradient">{t.landing.howItWorks.titleHighlight}</span>
               </h2>
-              <p className="text-lg max-w-2xl mx-auto text-[#ffffff]">Three steps to turn signals into self-knowledge.</p>
+              <p className="text-lg max-w-2xl mx-auto text-[#ffffff]">{t.landing.howItWorks.subtitle}</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {[
-                {
-                  step: "01",
-                  title: "Connect",
-                  desc: "Add the browser extension and stay logged into Instagram as usual. Waler reads only what you already see — never your password.",
-                  icon: Eye
-                },
-                {
-                  step: "02",
-                  title: "Notice",
-                  desc: "When someone close leaves — unfollows, blocks, disappears — Waler catches it before you do.",
-                  icon: BarChart3
-                },
-                {
-                  step: "03",
-                  title: "Reflect",
-                  desc: "Not just a number. A guided introspection to understand your role in what just changed.",
-                  icon: Zap
-                }
-              ].map((item, i) => (
+              {t.landing.howItWorks.steps.map((item, i) => ({
+                ...item,
+                step: String(i + 1).padStart(2, "0"),
+                icon: [Eye, BarChart3, Zap][i],
+              })).map((item, i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, y: 30 }}
@@ -301,32 +289,13 @@ export default function Landing() {
           >
             <div className="text-center mb-16 text-paper">
               <h2 className="text-4xl md:text-6xl font-display font-black mb-6 text-white tracking-tighter">
-                What people <span className="text-gradient">say</span>
+                {t.landing.testimonials.title} <span className="text-gradient">{t.landing.testimonials.titleHighlight}</span>
               </h2>
-              <p className="text-lg max-w-2xl mx-auto text-white/70">From people who stopped guessing and started understanding.</p>
+              <p className="text-lg max-w-2xl mx-auto text-white/70">{t.landing.testimonials.subtitle}</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                {
-                  name: "Sarah M.",
-                  role: "Content creator · 12.4k followers",
-                  text: "I used to refresh my follower count five times a day. Waler told me exactly who left and when — so I could finally stop guessing and just move on.",
-                  rating: 5
-                },
-                {
-                  name: "Alex K.",
-                  role: "Coach · runs his client list in Pro",
-                  text: "The relationship scores changed how I prioritise. I can see at a glance who's actually engaging versus who just followed and went quiet.",
-                  rating: 5
-                },
-                {
-                  name: "Emma L.",
-                  role: "Photographer",
-                  text: "It runs quietly in my browser — I never gave it a password. Two months in and it's caught every unfollow and block I'd otherwise have missed.",
-                  rating: 5
-                }
-              ].map((testimonial, i) => (
+              {t.landing.testimonials.items.map((testimonial, i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, y: 30 }}
@@ -337,7 +306,7 @@ export default function Landing() {
                   data-testid={`testimonial-${i}`}
                 >
                   <div className="flex gap-1 mb-4">
-                    {[...Array(testimonial.rating)].map((_, starIndex) => (
+                    {[...Array(5)].map((_, starIndex) => (
                       <Star key={starIndex} className="w-4 h-4 fill-[#02c950] text-[#02c950]" />
                     ))}
                   </div>
@@ -371,21 +340,17 @@ export default function Landing() {
           >
             <div className="inline-flex items-center gap-2 bg-[#02c950]/10 backdrop-blur-md border border-[#02c950]/30 rounded-full px-6 py-3 mb-8 shadow-[0_0_30px_rgba(2,201,80,0.15)]">
               <Crown className="w-5 h-5 text-[#02c950]" />
-              <span className="text-[#02c950] font-bold tracking-wider text-sm">PRO MODE</span>
+              <span className="text-[#02c950] font-bold tracking-wider text-sm">{t.landing.proIntro.badge}</span>
             </div>
             <h2 className="text-5xl md:text-7xl font-display font-black mb-8 text-white tracking-tighter leading-tight">
-              Turn insights into <br />
-              <span className="text-gradient">business growth</span>
+              {t.landing.proIntro.title} <br />
+              <span className="text-gradient">{t.landing.proIntro.titleHighlight}</span>
             </h2>
             <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto leading-relaxed">
-              Go beyond your own profile. Track a list of contacts, score every relationship, and surface the connections worth your attention — all from one dashboard.
+              {t.landing.proIntro.subtitle}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-              {[
-                { value: "0–100", label: "Relationship score per contact" },
-                { value: "Multi-account", label: "Profiles from one dashboard" },
-                { value: "Real-time", label: "Follower & engagement sync" }
-              ].map((stat, i) => (
+              {t.landing.proIntro.stats.map((stat, i) => (
                 <div key={i} className="oled-card rounded-3xl p-6">
                   <div className="text-3xl font-black text-[#02c950] mb-2">{stat.value}</div>
                   <div className="text-gray-400 font-medium text-sm leading-snug">{stat.label}</div>
@@ -433,11 +398,11 @@ export default function Landing() {
                         </div>
                         <div className="flex-1">
                           <div className="font-bold text-white">{client.name}</div>
-                          <div className="text-sm text-gray-400">{client.followers} followers</div>
+                          <div className="text-sm text-gray-400">{client.followers} {t.landing.proClients.followers}</div>
                         </div>
                         <div className="text-right">
                           <div className="text-2xl font-black text-white">{client.score}</div>
-                          <div className="text-xs text-gray-400">Score</div>
+                          <div className="text-xs text-gray-400">{t.landing.proClients.score}</div>
                         </div>
                       </motion.div>
                     ))}
@@ -450,13 +415,13 @@ export default function Landing() {
                 <Users className="w-10 h-10 text-white" />
               </div>
               <h2 className="text-5xl md:text-6xl font-display font-black mb-6 text-white tracking-tighter">
-                Manage <span className="text-gradient">multiple clients</span>
+                {t.landing.proClients.title} <span className="text-gradient">{t.landing.proClients.titleHighlight}</span>
               </h2>
               <p className="text-xl text-gray-300 leading-relaxed mb-6">
-                Track unlimited clients and their Instagram circles from one unified dashboard. Monitor engagement, analyze patterns, and build stronger relationships at scale.
+                {t.landing.proClients.desc}
               </p>
               <ul className="space-y-3 text-left">
-                {["Unlimited client profiles", "Real-time sync", "Automated tracking", "Custom categories"].map((item, i) => (
+                {t.landing.proClients.features.map((item, i) => (
                   <motion.li
                     key={i}
                     initial={{ x: -20, opacity: 0 }}
@@ -497,16 +462,19 @@ export default function Landing() {
                     <div className="text-7xl font-black text-[#02c950] mb-2 drop-shadow-[0_0_24px_rgba(2,201,80,0.45)]">
                       92
                     </div>
-                    <div className="text-gray-400 font-medium">Relationship Score</div>
+                    <div className="text-gray-400 font-medium">{t.landing.proScoring.cardLabel}</div>
                   </div>
                   <div className="space-y-4">
-                    {[
-                      { label: "Engagement", value: 30, max: 30, color: "from-green-400 to-emerald-500" },
-                      { label: "Likes Received", value: 18, max: 20, color: "from-green-500 to-emerald-600" },
-                      { label: "Connection Streak", value: 20, max: 20, color: "from-emerald-400 to-green-500" },
-                      { label: "Seniority", value: 12, max: 15, color: "from-green-300 to-emerald-400" },
-                      { label: "Mutual Connections", value: 12, max: 15, color: "from-emerald-500 to-green-600" }
-                    ].map((metric, i) => (
+                    {t.landing.proScoring.metrics.map((metric, i) => ({
+                      ...metric,
+                      ...[
+                        { value: 30, max: 30, color: "from-green-400 to-emerald-500" },
+                        { value: 18, max: 20, color: "from-green-500 to-emerald-600" },
+                        { value: 20, max: 20, color: "from-emerald-400 to-green-500" },
+                        { value: 12, max: 15, color: "from-green-300 to-emerald-400" },
+                        { value: 12, max: 15, color: "from-emerald-500 to-green-600" },
+                      ][i],
+                    })).map((metric, i) => (
                       <motion.div
                         key={i}
                         initial={{ x: -20, opacity: 0 }}
@@ -536,18 +504,16 @@ export default function Landing() {
                 <Target className="w-10 h-10 text-[#02c950]" />
               </div>
               <h2 className="text-5xl md:text-6xl font-display font-black mb-6 text-white tracking-tighter">
-                Precision <span className="text-gradient">relationship scoring</span>
+                {t.landing.proScoring.title} <span className="text-gradient">{t.landing.proScoring.titleHighlight}</span>
               </h2>
               <p className="text-xl text-gray-300 leading-relaxed mb-6">
-                Every connection gets a clear 0–100 score, built from what's actually measurable: how often they engage, the likes they leave, how long they've stayed, and the followers you share. Know exactly who matters most.
+                {t.landing.proScoring.desc}
               </p>
               <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: "Engagement", Icon: MessageCircle },
-                  { label: "Consistency", Icon: Activity },
-                  { label: "Seniority", Icon: Clock },
-                  { label: "Network", Icon: Link }
-                ].map((factor, i) => (
+                {t.landing.proScoring.factors.map((factor, i) => ({
+                  ...factor,
+                  Icon: [MessageCircle, Activity, Clock, Link][i],
+                })).map((factor, i) => (
                   <motion.div
                     key={i}
                     initial={{ scale: 0.8, opacity: 0 }}
@@ -582,15 +548,15 @@ export default function Landing() {
                 <Network className="w-10 h-10 text-[#02c950]" />
               </div>
               <h2 className="text-5xl md:text-6xl font-display font-black mb-6 text-white tracking-tighter">
-                Discover <span className="text-gradient">hidden connections</span>
+                {t.landing.proConnections.title} <span className="text-gradient">{t.landing.proConnections.titleHighlight}</span>
               </h2>
               <p className="text-xl text-gray-300 leading-relaxed mb-6">
-                Waler maps the followers your contacts have in common, so you can see who's connected to whom and which shared contacts are worth an introduction.
+                {t.landing.proConnections.desc}
               </p>
               <div className="oled-card rounded-3xl p-6 text-left">
-                <div className="text-xs text-[#02c950] font-bold mb-2 tracking-widest">EXAMPLE</div>
-                <div className="text-white font-medium mb-1">Sarah & Mike share 12 mutual followers</div>
-                <div className="text-gray-400 text-sm">Including @john_doe, @emma_wilson, @alex_smith…</div>
+                <div className="text-xs text-[#02c950] font-bold mb-2 tracking-widest">{t.landing.proConnections.exampleTag}</div>
+                <div className="text-white font-medium mb-1">{t.landing.proConnections.exampleTitle}</div>
+                <div className="text-gray-400 text-sm">{t.landing.proConnections.exampleDesc}</div>
               </div>
             </div>
             <div className="order-first lg:order-last">
@@ -605,7 +571,7 @@ export default function Landing() {
                 <div className="relative w-full h-full">
                   {/* Center node — pastille verte de marque (comme le bouton Login) */}
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full bg-[#02c950] flex items-center justify-center text-black font-bold text-2xl shadow-[0_0_40px_rgba(2,201,80,0.5)] z-20">
-                    You
+                    {t.landing.proConnections.centerNode}
                   </div>
                   {/* Lignes de connexion statiques */}
                   {[
@@ -656,17 +622,17 @@ export default function Landing() {
                 <TrendingUp className="w-10 h-10 text-[#02c950]" />
               </div>
               <h2 className="text-5xl md:text-6xl font-display font-black mb-6 text-white tracking-tighter">
-                Behavioral <span className="text-gradient">analytics</span>
+                {t.landing.proAnalytics.title} <span className="text-gradient">{t.landing.proAnalytics.titleHighlight}</span>
               </h2>
               <p className="text-xl text-gray-300 leading-relaxed mb-6">
-                Waler reads the patterns behind the numbers — like streaks, engagement timing, and follow-then-unfollow moves — and groups each contact into clear behavior types you can act on.
+                {t.landing.proAnalytics.desc}
               </p>
               <div className="space-y-3">
-                {[
-                  { type: "Follows then engages", strength: 100, color: "from-[#02c950] to-[#02c950]/70" },
-                  { type: "Consistent liker", strength: 85, color: "from-[#02c950] to-[#02c950]/70" },
-                  { type: "Recurring visitor", strength: 78, color: "from-[#02c950] to-[#02c950]/70" }
-                ].map((signal, i) => (
+                {t.landing.proAnalytics.signals.map((signal, i) => ({
+                  ...signal,
+                  strength: [100, 85, 78][i],
+                  color: "from-[#02c950] to-[#02c950]/70",
+                })).map((signal, i) => (
                   <motion.div
                     key={i}
                     initial={{ x: -20, opacity: 0 }}
@@ -699,16 +665,14 @@ export default function Landing() {
               >
                 <div className="absolute inset-0 bg-[#02c950]/15 blur-[110px] rounded-full" />
                 <div className="oled-card relative rounded-[40px] p-8">
-                  <div className="text-xs text-[#02c950] font-bold mb-6 tracking-widest">ENGAGEMENT TIMELINE</div>
+                  <div className="text-xs text-[#02c950] font-bold mb-6 tracking-widest">{t.landing.proAnalytics.timelineTag}</div>
                   <div className="relative space-y-6">
                     {/* Connecting rail — centré sur les icônes (w-9 = 36px → centre à 18px) */}
                     <div className="absolute left-[18px] top-[18px] bottom-[18px] w-px -translate-x-1/2 bg-gradient-to-b from-[#02c950]/40 via-[#02c950]/20 to-transparent" />
-                    {[
-                      { day: "Day 1", event: "Followed you", Icon: UserPlus },
-                      { day: "Day 2", event: "Liked 3 posts", Icon: Heart },
-                      { day: "Day 5", event: "Liked 5 posts", Icon: Flame },
-                      { day: "Day 7", event: "Still engaging", Icon: Activity }
-                    ].map((item, i) => (
+                    {t.landing.proAnalytics.timeline.map((item, i) => ({
+                      ...item,
+                      Icon: [UserPlus, Heart, Flame, Activity][i],
+                    })).map((item, i) => (
                       <motion.div
                         key={i}
                         initial={{ x: -20, opacity: 0 }}
@@ -737,31 +701,14 @@ export default function Landing() {
                 
         {/* Nested snap container */}
         <div className="h-full overflow-y-auto snap-y snap-mandatory relative z-10 scrollbar-hide">
-          {[
-            {
-              icon: Search,
-              title: "Notice what matters, when it matters",
-              desc: "No more wondering. Waler gently catches every shift in your connections — so you can understand what changed, not just react to it.",
-              color: "text-[#02c950]",
-              tag: "AWARENESS",
-              animation: true
-            },
-            {
-              icon: BarChart3,
-              title: "Relationship Insights",
-              desc: "Understand patterns in your connections. See who stays, who leaves, and what it reveals about your relationships.",
-              color: "text-[#02c950]",
-              tag: "INSIGHTS",
-              preview: true
-            },
-            {
-              icon: Lock,
-              title: "Account Safety",
-              desc: "Waler runs in your own browser and never asks for your password or logs into your account. Your data is encrypted, and your account stays untouched — no intrusion, ever.",
-              color: "text-[#02c950]",
-              tag: "SECURITY"
-            }
-          ].map((feature, i) => (
+          {t.landing.features.items.map((feature, i) => ({
+            ...feature,
+            icon: [Search, BarChart3, Lock][i],
+            color: "text-[#02c950]",
+            animation: i === 0,
+            preview: i === 1,
+            isSecurity: i === 2,
+          })).map((feature, i) => (
             <div key={i} className="h-screen snap-start snap-always flex items-center justify-center px-6">
               <motion.div
                 initial={{ opacity: 0, y: 40 }}
@@ -865,7 +812,7 @@ export default function Landing() {
                       </div>
                     </div>
                   </div>
-                ) : feature.tag === "SECURITY" ? (
+                ) : feature.isSecurity ? (
                   <div className="order-2 lg:order-1 flex justify-center lg:justify-start">
                     <motion.div
                       initial={{ scale: 0.8, opacity: 0, rotate: -10 }}
@@ -903,7 +850,7 @@ export default function Landing() {
                   </div>
                 ) : null}
 
-                <div className={`order-1 lg:order-2 text-center lg:text-left text-paper ${(!feature.animation && !feature.preview && feature.tag !== "SECURITY") ? 'lg:col-span-2 lg:text-center' : ''}`}>
+                <div className={`order-1 lg:order-2 text-center lg:text-left text-paper ${(!feature.animation && !feature.preview && !feature.isSecurity) ? 'lg:col-span-2 lg:text-center' : ''}`}>
                   <div className="flex flex-col items-center lg:items-start">
                     <motion.div 
                       initial={{ scale: 0.8, opacity: 0 }}
@@ -914,8 +861,8 @@ export default function Landing() {
                       <feature.icon className="w-10 h-10" />
                     </motion.div>
                     <h2 className="text-5xl md:text-7xl font-display font-black mb-8 text-white tracking-tighter leading-tight">
-                      {feature.title.split(' ')[0]} <br />
-                      <span className="text-gradient">{feature.title.split(' ').slice(1).join(' ')}</span>
+                      {feature.title} <br />
+                      <span className="text-gradient">{feature.titleHighlight}</span>
                     </h2>
                   </div>
                   <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto lg:mx-0 leading-loose tracking-wide">
@@ -937,9 +884,9 @@ export default function Landing() {
             className="text-center mb-16 text-paper"
           >
             <h2 className="text-4xl md:text-6xl font-display font-black text-white mb-6 tracking-tighter">
-              Common <span className="text-gradient">Questions</span>
+              {t.landing.faq.title} <span className="text-gradient">{t.landing.faq.titleHighlight}</span>
             </h2>
-            <p className="text-xl text-gray-400">Everything you need to know about Waler.</p>
+            <p className="text-xl text-gray-400">{t.landing.faq.subtitle}</p>
           </motion.div>
 
           <motion.div
@@ -950,44 +897,7 @@ export default function Landing() {
             className="oled-card rounded-[40px] p-8 md:p-12"
           >
             <Accordion type="single" collapsible className="w-full space-y-4">
-              {[
-                {
-                  q: "Is Waler safe for my account?",
-                  a: "Yes. Waler never asks for your Instagram password and never logs into your account. It runs as a secure browser extension on your own device, reading only the information you can already see yourself, and your data is encrypted in transit and at rest."
-                },
-                {
-                  q: "Do I need to provide my login credentials?",
-                  a: "Never. You stay logged into Instagram as usual — Waler's extension works inside your own browser and never sees or stores your password."
-                },
-                {
-                  q: "How does the tracking work exactly?",
-                  a: "Waler's browser extension reads your follower list while you browse Instagram normally, then compares it over time. That's how it detects exactly who unfollowed you, who followed you, and which accounts were deactivated or deleted — without ever touching your password."
-                },
-                {
-                  q: "Can I track multiple accounts?",
-                  a: "Absolutely. Our premium plans allow you to connect and monitor multiple Instagram profiles from a single dashboard."
-                },
-                {
-                  q: "Is it possible to see who viewed my profile?",
-                  a: "Instagram doesn't expose a list of profile visitors, and no tool can honestly provide one. Waler focuses on what's real and verifiable: who engages with you, who follows and unfollows you, and how those patterns evolve over time."
-                },
-                {
-                  q: "How often are the stats updated?",
-                  a: "We provide real-time tracking. As soon as a change is detected on your profile, your dashboard is updated and notifications are sent."
-                },
-                {
-                  q: "Will the people I track be notified?",
-                  a: "No. Waler is a silent monitoring tool. Your tracking activity is completely private and invisible to the accounts you monitor."
-                },
-                {
-                  q: "How fast will I receive a notification after a change occurs?",
-                  a: "Notifications are sent as soon as our system detects a change during its regular monitoring cycles. While not always instantaneous due to high demand, we strive to keep you updated as quickly as possible."
-                },
-                {
-                  q: "Is there a free trial available?",
-                  a: "Yes! You can connect your account for free to see your current stats. Advanced historical tracking and real-time alerts require a premium subscription."
-                }
-              ].map((faq, i) => (
+              {t.landing.faq.items.map((faq, i) => (
                 <AccordionItem key={i} value={`item-${i}`} className="border-b border-white/10 last:border-0 pb-2">
                   <AccordionTrigger className="text-xl md:text-2xl font-bold text-white hover:text-[#02c950] transition-colors py-6 text-left hover:no-underline">
                     {faq.q}
@@ -1012,20 +922,19 @@ export default function Landing() {
             className="text-center mb-24 text-paper"
           >
             <h2 className="text-5xl md:text-7xl font-display font-black leading-tight mb-6 text-white tracking-tighter">
-              Every follower has a <span className="text-gradient">story</span>
+              {t.landing.story.title} <span className="text-gradient">{t.landing.story.titleHighlight}</span>
             </h2>
             <p className="text-xl md:text-2xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
-              And every story deserves to be known
+              {t.landing.story.subtitle}
             </p>
           </motion.div>
 
           <div className="space-y-24 mb-32">
-            {[
-              { icon: Users, title: "You built something real", desc: "Every follower represents a connection. A person who chose to see your content, to be part of your journey.", color: "text-[#02c950]", transition: null },
-              { icon: Heart, title: "But relationships change", desc: "Some stay. Some fade away. Some disappear without a trace. And you're left wondering... what happened?", color: "text-[#02c950]", transition: "And then, without warning..." },
-              { icon: TrendingDown, title: "The invisible shift", desc: "They unfollow in silence. They block without explanation. Your numbers drop — but behind every number, there's a relationship worth understanding.", color: "text-[#02c950]", transition: "That silence... it means something." },
-              { icon: Shield, title: "Until now", desc: "Waler turns that signal into self-knowledge. See exactly who unfollowed, who blocked you, and when it happened — then understand what it means about you.", color: "text-[#02c950]", transition: "But what if you could know?" }
-            ].map((beat, index) => (
+            {t.landing.story.beats.map((beat, index) => ({
+              ...beat,
+              icon: [Users, Heart, TrendingDown, Shield][index],
+              color: "text-[#02c950]",
+            })).map((beat, index) => (
               <div key={index}>
                 {beat.transition && (
                   <motion.p
@@ -1074,10 +983,10 @@ export default function Landing() {
           >
             <div className="text-paper">
               <h2 className="text-4xl md:text-6xl font-display font-black mb-8 text-white tracking-tighter">
-                Ready to understand <span className="text-gradient">yourself better</span>?
+                {t.landing.story.ctaTitle} <span className="text-gradient">{t.landing.story.ctaTitleHighlight}</span>
               </h2>
               <p className="text-xl text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-                Join thousands of people who chose reflection over reaction.
+                {t.landing.story.ctaSubtitle}
               </p>
             </div>
             <div className="flex items-center justify-center mb-16">
@@ -1086,7 +995,7 @@ export default function Landing() {
                 className="text-lg px-10 py-5 rounded-full transition-all duration-300 bg-[#02c950]/20 backdrop-blur-md border border-white/20 hover:shadow-[0_0_30px_rgba(2,201,80,0.5)] hover:bg-[#02c950]/30 font-bold text-white inline-flex items-center gap-3"
                 data-testid="button-cta-start-tracking"
               >
-                Begin Your Journey <ArrowRight className="w-6 h-6" />
+                {t.landing.story.ctaButton} <ArrowRight className="w-6 h-6" />
               </button>
             </div>
             <footer className="border-t border-white/10 pt-8 mt-16">
@@ -1100,20 +1009,20 @@ export default function Landing() {
                   walerwebsite@outlook.com
                 </a>
                 <a href="/privacy" className="text-gray-400 hover:text-white transition-colors">
-                  Privacy Policy
+                  {t.common.footer.privacy}
                 </a>
                 <a href="/terms" className="text-gray-400 hover:text-white transition-colors">
-                  Terms of Service
+                  {t.common.footer.terms}
                 </a>
                 <a href="/legal" className="text-gray-400 hover:text-white transition-colors">
-                  Legal Notice
+                  {t.common.footer.legal}
                 </a>
                 <a href="/cookies" className="text-gray-400 hover:text-white transition-colors">
-                  Cookies
+                  {t.common.footer.cookies}
                 </a>
               </div>
               <div className="text-sm text-gray-500 text-center">
-                &copy; {new Date().getFullYear()} Waler Analytics. All rights reserved.
+                &copy; {new Date().getFullYear()} {t.common.footer.copyright}
               </div>
             </footer>
           </motion.div>

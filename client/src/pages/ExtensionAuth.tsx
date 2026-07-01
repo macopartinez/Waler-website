@@ -3,10 +3,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, Copy, Lock } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 declare const chrome: any;
 
 export default function ExtensionAuth() {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
 
@@ -31,7 +33,7 @@ export default function ExtensionAuth() {
         console.log('✅ Token generated:', { userId });
 
         // Envoyer le token à l'extension via chrome.runtime
-        const extensionId = 'adapccolepnlmimjemidkeamcbpgkeeo'; // Remplacer par votre ID
+        const extensionId = 'dbogablehjicifjkkgigabhdofbjjbmj'; // ID réel de l'item Chrome Web Store (= dérivé du "key" du manifest)
         
         console.log('🔐 Sending token to extension...');
         
@@ -79,15 +81,15 @@ export default function ExtensionAuth() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Lock className="h-5 w-5 text-green-500" />
-              Authentication required
+              {t.extensionAuth.authRequired}
             </CardTitle>
             <CardDescription>
-              Please sign in to authenticate the extension
+              {t.extensionAuth.authRequiredDesc}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button onClick={() => window.location.href = '/'} className="w-full">
-              Sign in
+              {t.extensionAuth.signIn}
             </Button>
           </CardContent>
         </Card>
@@ -101,25 +103,25 @@ export default function ExtensionAuth() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CheckCircle className="h-6 w-6 text-green-500" />
-            Extension Authenticated!
+            {t.extensionAuth.authenticatedTitle}
           </CardTitle>
           <CardDescription>
-            Your Waler extension is now connected to your account
+            {t.extensionAuth.authenticatedDesc}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
             <p className="text-sm font-semibold text-green-400 mb-2 flex items-center gap-2">
               <CheckCircle className="h-4 w-4" />
-              Extension authenticated automatically!
+              {t.extensionAuth.autoAuthTitle}
             </p>
             <p className="text-xs text-green-500/80">
-              Your Waler extension is now connected. You can close this page and use the extension on Instagram.
+              {t.extensionAuth.autoAuthDesc}
             </p>
           </div>
 
           <div className="border-t pt-4">
-            <p className="text-sm font-medium mb-2">Your User ID:</p>
+            <p className="text-sm font-medium mb-2">{t.extensionAuth.yourUserId}</p>
             <div className="flex items-center gap-2">
               <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm">
                 {user.id}
@@ -135,12 +137,11 @@ export default function ExtensionAuth() {
           </div>
 
           <div className="space-y-2">
-            <h3 className="font-semibold text-sm">Next steps:</h3>
+            <h3 className="font-semibold text-sm">{t.extensionAuth.nextSteps}</h3>
             <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-              <li>Go to instagram.com</li>
-              <li>Log in to Instagram</li>
-              <li>Click the Waler icon</li>
-              <li>Enjoy real-time tracking!</li>
+              {t.extensionAuth.steps.map((step, idx) => (
+                <li key={idx}>{step}</li>
+              ))}
             </ol>
           </div>
 
@@ -148,7 +149,7 @@ export default function ExtensionAuth() {
             onClick={() => window.close()}
             className="w-full"
           >
-            Close and get started
+            {t.extensionAuth.closeButton}
           </Button>
         </CardContent>
       </Card>

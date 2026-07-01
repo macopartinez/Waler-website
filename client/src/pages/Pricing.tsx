@@ -7,8 +7,10 @@ import { RadarBackground } from "@/components/RadarBackground";
 import { NavBar } from "@/components/NavBar";
 import { motion } from "framer-motion";
 import { Check, Zap, Crown, Loader2 } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Pricing() {
+  const { t } = useLanguage();
   const [, navigate] = useLocation();
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
   const { user } = useAuth();
@@ -70,7 +72,7 @@ export default function Pricing() {
             variant="ghost"
             className="text-white hover:text-[#02c950]"
           >
-            Back
+            {t.pricing.nav.back}
           </Button>
         }
       />
@@ -85,7 +87,7 @@ export default function Pricing() {
               animate={{ opacity: 1, y: 0 }}
               className="text-5xl md:text-6xl font-bold mb-6"
             >
-              Choose your <span className="text-[#02c950]">plan</span>
+              {t.pricing.title} <span className="text-[#02c950]">{t.pricing.titleHighlight}</span>
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -93,7 +95,7 @@ export default function Pricing() {
               transition={{ delay: 0.1 }}
               className="text-xl text-gray-400 max-w-2xl mx-auto"
             >
-              Start for free, upgrade to Pro when you're ready
+              {t.pricing.subtitle}
             </motion.p>
           </div>
 
@@ -108,7 +110,7 @@ export default function Pricing() {
                     : "text-gray-400 hover:text-white"
                 }`}
               >
-                Monthly
+                {t.pricing.monthly}
               </button>
               <button
                 onClick={() => setBillingPeriod("yearly")}
@@ -118,9 +120,9 @@ export default function Pricing() {
                     : "text-gray-400 hover:text-white"
                 }`}
               >
-                Yearly
+                {t.pricing.yearly}
                 <span className="ml-2 text-xs bg-[#02c950]/20 text-[#02c950] px-2 py-1 rounded-full">
-                  -17%
+                  {t.pricing.yearlyDiscount}
                 </span>
               </button>
             </div>
@@ -152,13 +154,13 @@ export default function Pricing() {
                 >
                   {isPopular && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#02c950] text-black px-4 py-1 rounded-full text-sm font-bold">
-                      Most popular
+                      {t.pricing.mostPopular}
                     </div>
                   )}
 
                   {isCurrentPlan && (
                     <div className="absolute top-4 right-4 bg-[#02c950] text-black px-3 py-1 rounded-full text-xs font-bold">
-                      Current plan
+                      {t.pricing.currentPlan}
                     </div>
                   )}
 
@@ -170,7 +172,7 @@ export default function Pricing() {
                     <div className="flex items-baseline gap-2">
                       <span className="text-4xl font-bold">{formatPrice(price)}€</span>
                       <span className="text-gray-400">
-                        /{billingPeriod === "monthly" ? "month" : "year"}
+                        /{billingPeriod === "monthly" ? t.pricing.perMonth : t.pricing.perYear}
                       </span>
                     </div>
                   </div>
@@ -197,12 +199,12 @@ export default function Pricing() {
                       {isCheckoutPending ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Loading...
+                          {t.pricing.loading}
                         </>
                       ) : isCurrentPlan ? (
-                        "Current plan"
+                        t.pricing.currentPlan
                       ) : (
-                        "Choose this plan"
+                        t.pricing.choosePlanButton
                       )}
                     </Button>
                   </div>
@@ -214,9 +216,9 @@ export default function Pricing() {
           {/* FAQ or Additional Info */}
           <div className="mt-20 text-center">
             <p className="text-gray-400">
-              Need help choosing?{" "}
+              {t.pricing.needHelp}{" "}
               <a href="mailto:support@waler.app" className="text-[#02c950] hover:underline">
-                Contact us
+                {t.pricing.contactUs}
               </a>
             </p>
           </div>

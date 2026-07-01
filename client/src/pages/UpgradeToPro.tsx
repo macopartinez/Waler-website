@@ -11,10 +11,13 @@ import { GlassText } from '@/components/GlassText';
 import { RadarBackground } from '@/components/RadarBackground';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useOfferCountdown, yearlyStandardPrice } from '@/hooks/use-offer-countdown';
+import { useLanguage, interpolate } from '@/contexts/LanguageContext';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 type BillingPeriod = 'monthly' | 'yearly';
 
 export default function UpgradeToPro() {
+  const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const { tier, upgradeToPro } = useSubscription();
   // TODO: Get actual billing period from user's subscription
@@ -58,28 +61,14 @@ export default function UpgradeToPro() {
         : proYearlyStandard;
   const yearlyDiscount = Math.round((1 - proYearlyOffer / (proMonthly * 12)) * 100);
 
-  const premiumFeatures = [
-    '1 Instagram account',
-    '30-day change history',
-    'See who unfollowed or blocked you',
-    'Relationship & psychological insights',
-    'Real-time unfollower alerts',
-    'PDF export',
-    'Email support',
-  ];
+  const premiumFeatures = t.upgradeToPro.premiumFeatures;
 
-  const proExclusiveFeatures = [
-    { icon: Users, text: 'Up to 3 Instagram accounts', highlight: true },
-    { icon: Calendar, text: 'Unlimited history', highlight: true },
-    { icon: Briefcase, text: 'Client & prospect CRM (VIP / Keep / Watch)', highlight: true },
-    { icon: Thermometer, text: 'DM conversation temperature (hot / warm / cold)', highlight: true },
-    { icon: Target, text: 'Lead qualification phases', highlight: true },
-    { icon: Activity, text: 'Interaction signal timeline', highlight: true },
-    { icon: BarChart3, text: 'Contact health & priority scoring', highlight: true },
-    { icon: FileText, text: 'PDF progress reports', highlight: true },
-    { icon: Clock, text: 'Upcoming features', highlight: true },
-    { icon: Award, text: '"Waler Pro Coach" badge', highlight: true },
-  ];
+  const proExclusiveIcons = [Users, Calendar, Briefcase, Thermometer, Target, Activity, BarChart3, FileText, Clock, Award];
+  const proExclusiveFeatures = t.upgradeToPro.proFeatures.map((text, i) => ({
+    icon: proExclusiveIcons[i],
+    text,
+    highlight: true,
+  }));
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-body text-white relative overflow-hidden">
@@ -90,10 +79,10 @@ export default function UpgradeToPro() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <button onClick={() => setLocation('/dashboard/1')} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
             <ArrowLeft className="w-5 h-5" />
-            Back to Dashboard
+            {t.upgradeToPro.backToDashboard}
           </button>
           <GlassText text="WALER" fontSize={32} />
-          <div className="w-32" />
+          <LanguageSwitcher />
         </div>
       </nav>
 
@@ -104,13 +93,13 @@ export default function UpgradeToPro() {
             <div className="flex items-center justify-center gap-3 flex-wrap text-center">
               <Clock className="w-5 h-5 text-gray-400" />
               <span className="text-gray-300 font-semibold">
-                The special offer has ended — standard pricing now applies.
+                {t.upgradeToPro.offerEnded}
               </span>
             </div>
           ) : (
             <div className="flex items-center justify-center gap-4 flex-wrap">
               <Clock className="w-5 h-5 text-[#02c950] animate-pulse" />
-              <span className="text-gray-200 font-semibold">Special offer expires in</span>
+              <span className="text-gray-200 font-semibold">{t.upgradeToPro.offerExpiresIn}</span>
               <div className="flex items-center gap-1.5">
                 {([
                   { value: timeLeft.hours, unit: 'h' },
@@ -142,14 +131,13 @@ export default function UpgradeToPro() {
               className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-full px-4 py-2 mb-4"
             >
               <Sparkles className="w-4 h-4 text-green-400" />
-              <span className="text-green-300 font-semibold text-sm">Level up</span>
+              <span className="text-green-300 font-semibold text-sm">{t.upgradeToPro.badge}</span>
             </motion.div>
             <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-              Unlock Professional mode
+              {t.upgradeToPro.title}
             </h1>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              You're currently on the <span className="text-white font-bold">Base</span> plan.
-              Discover what the <span className="text-[#02c950] font-bold">Pro</span> plan can do for you.
+              {interpolate(t.upgradeToPro.subtitle, { plan: 'Base', proPlan: 'Pro' })}
             </p>
           </div>
 
@@ -164,7 +152,7 @@ export default function UpgradeToPro() {
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                Monthly
+                {t.upgradeToPro.monthly}
               </button>
               <button
                 onClick={() => setBillingPeriod('yearly')}
@@ -174,7 +162,7 @@ export default function UpgradeToPro() {
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                Yearly
+                {t.upgradeToPro.yearly}
                 {offerActive && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
                     -{yearlyDiscount}%
@@ -194,7 +182,7 @@ export default function UpgradeToPro() {
             >
               <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-[#02c950]/15 border border-[#02c950]/40 text-[#02c950] px-3 py-1.5 rounded-full text-xs font-bold">
                 <Check className="w-3.5 h-3.5" />
-                Your current plan
+                {t.upgradeToPro.yourCurrentPlan}
               </div>
 
               {/* Icon */}
@@ -212,15 +200,15 @@ export default function UpgradeToPro() {
                     <span className="text-2xl font-bold text-gray-500 line-through">{premiumYearlyStandard.toFixed(2)}€</span>
                   )}
                   <span className="text-5xl font-black text-white">{premiumPrice.toFixed(2)}€</span>
-                  <span className="text-gray-400">/{billingPeriod === 'monthly' ? 'month' : 'year'}</span>
+                  <span className="text-gray-400">{billingPeriod === 'monthly' ? t.upgradeToPro.perMonth : t.upgradeToPro.perYear}</span>
                 </div>
                 {billingPeriod === 'yearly' && offerActive && (
                   <p className="text-sm text-green-400 mt-1">
-                    Save {(premiumYearlyStandard - premiumPrice).toFixed(2)}€ compared to monthly
+                    {interpolate(t.upgradeToPro.saveCompared, { amount: (premiumYearlyStandard - premiumPrice).toFixed(2) })}
                   </p>
                 )}
                 <p className="text-sm text-gray-400 mt-1">
-                  7-14 day free trial • Cancel anytime
+                  {t.upgradeToPro.trialNote}
                 </p>
               </div>
 
@@ -238,7 +226,7 @@ export default function UpgradeToPro() {
 
               {/* CTA Indicator */}
               <div className="w-full py-3 rounded-xl font-bold text-center bg-white/10 text-white">
-                Current Plan
+                {t.upgradeToPro.currentPlanButton}
               </div>
             </motion.div>
 
@@ -250,7 +238,7 @@ export default function UpgradeToPro() {
             >
               <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white text-sm font-bold flex items-center gap-2">
                 <Star className="w-4 h-4" />
-                Recommended
+                {t.upgradeToPro.recommended}
               </div>
 
               {/* Icon */}
@@ -268,15 +256,15 @@ export default function UpgradeToPro() {
                     <span className="text-2xl font-bold text-gray-500 line-through">{proYearlyStandard.toFixed(2)}€</span>
                   )}
                   <span className="text-5xl font-black text-white">{proPrice.toFixed(2)}€</span>
-                  <span className="text-gray-400">/{billingPeriod === 'monthly' ? 'month' : 'year'}</span>
+                  <span className="text-gray-400">{billingPeriod === 'monthly' ? t.upgradeToPro.perMonth : t.upgradeToPro.perYear}</span>
                 </div>
                 {billingPeriod === 'yearly' && offerActive && (
                   <p className="text-sm text-green-400 mt-1">
-                    Save {(proYearlyStandard - proPrice).toFixed(2)}€ compared to monthly
+                    {interpolate(t.upgradeToPro.saveCompared, { amount: (proYearlyStandard - proPrice).toFixed(2) })}
                   </p>
                 )}
                 <p className="text-sm text-gray-400 mt-1">
-                  7-14 day free trial • Cancel anytime
+                  {t.upgradeToPro.trialNote}
                 </p>
               </div>
 
@@ -292,7 +280,7 @@ export default function UpgradeToPro() {
                       <span className="text-gray-300 text-sm leading-relaxed">{feature.text}</span>
                       {feature.highlight && (
                         <span className="ml-auto text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
-                          New
+                          {t.upgradeToPro.newBadge}
                         </span>
                       )}
                     </div>
@@ -305,7 +293,7 @@ export default function UpgradeToPro() {
                 onClick={handleUpgrade}
                 className="w-full py-3 rounded-xl font-bold text-center bg-gradient-to-r from-green-500 to-emerald-500 text-white transition-all hover:from-green-600 hover:to-emerald-600"
               >
-                Upgrade to Pro now
+                {t.upgradeToPro.upgradeButton}
               </button>
             </motion.div>
           </div>
@@ -320,13 +308,13 @@ export default function UpgradeToPro() {
             <div className="text-center mb-12">
               <div className="inline-flex items-center gap-2 bg-[#02c950]/10 border border-[#02c950]/30 rounded-full px-4 py-2 mb-4">
                 <Sparkles className="w-4 h-4 text-[#02c950]" />
-                <span className="text-[#02c950] font-semibold text-sm">Exclusive Features</span>
+                <span className="text-[#02c950] font-semibold text-sm">{t.upgradeToPro.preview.exclusiveFeatures}</span>
               </div>
               <h2 className="text-4xl font-bold mb-4 text-gradient">
-                Professional Mode Preview
+                {t.upgradeToPro.preview.title}
               </h2>
               <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-                The tools that turn your Instagram DMs into a real pipeline — built into Pro.
+                {t.upgradeToPro.preview.subtitle}
               </p>
             </div>
 
@@ -341,9 +329,9 @@ export default function UpgradeToPro() {
                 <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-4 bg-[#02c950]/12 border border-[#02c950]/25">
                   <Briefcase className="w-7 h-7 text-[#02c950]" />
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-white">Client &amp; Prospect CRM</h3>
+                <h3 className="text-xl font-bold mb-3 text-white">{t.upgradeToPro.preview.crm.title}</h3>
                 <p className="text-gray-400 mb-4 text-sm leading-relaxed">
-                  Keep every client and prospect in one place — sort them into VIP, Keep and Watch circles, add notes, and never lose a warm lead.
+                  {t.upgradeToPro.preview.crm.description}
                 </p>
                 <div className="bg-black/40 rounded-lg p-4 border border-white/5">
                   <div className="flex items-center gap-3 mb-3">
@@ -352,7 +340,7 @@ export default function UpgradeToPro() {
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-bold text-white truncate">@sarah.designs</div>
-                      <div className="text-xs text-gray-500">Prospect</div>
+                      <div className="text-xs text-gray-500">{t.upgradeToPro.preview.crm.prospectLabel}</div>
                     </div>
                     <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#02c950]/15 border border-[#02c950]/30 text-[#02c950]">
                       VIP
@@ -360,7 +348,7 @@ export default function UpgradeToPro() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-gray-400">
                     <Activity className="w-3.5 h-3.5 text-[#02c950]" />
-                    <span>Liked your last 3 posts</span>
+                    <span>{t.upgradeToPro.preview.crm.activitySignal}</span>
                   </div>
                 </div>
               </motion.div>
@@ -375,17 +363,17 @@ export default function UpgradeToPro() {
                 <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-4 bg-[#02c950]/12 border border-[#02c950]/25">
                   <Thermometer className="w-7 h-7 text-[#02c950]" />
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-white">Conversation Temperature</h3>
+                <h3 className="text-xl font-bold mb-3 text-white">{t.upgradeToPro.preview.temperature.title}</h3>
                 <p className="text-gray-400 mb-4 text-sm leading-relaxed">
-                  Pro reads your DM dynamics and scores each contact hot, warm or cold — then tells you the next step to move them forward.
+                  {t.upgradeToPro.preview.temperature.description}
                 </p>
                 <div className="bg-black/40 rounded-lg p-4 border border-white/5">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-gray-400">Signal</span>
-                    <span className="text-xs text-[#02c950] font-bold">Hot</span>
+                    <span className="text-xs text-gray-400">{t.upgradeToPro.preview.temperature.signal}</span>
+                    <span className="text-xs text-[#02c950] font-bold">{t.upgradeToPro.preview.temperature.hot}</span>
                   </div>
                   <div className="flex items-center gap-1.5 mb-3">
-                    {['Cold', 'Warm', 'Hot'].map((label, i) => (
+                    {[t.upgradeToPro.preview.temperature.cold, t.upgradeToPro.preview.temperature.warm, t.upgradeToPro.preview.temperature.hot].map((label, i) => (
                       <div
                         key={label}
                         className={`flex-1 text-center text-[10px] font-bold py-1 rounded ${
@@ -398,7 +386,7 @@ export default function UpgradeToPro() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-gray-400">
                     <Target className="w-3.5 h-3.5 text-[#02c950]" />
-                    <span>Next step: book a call</span>
+                    <span>{t.upgradeToPro.preview.temperature.nextStep}</span>
                   </div>
                 </div>
               </motion.div>
@@ -413,9 +401,9 @@ export default function UpgradeToPro() {
                 <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-4 bg-[#02c950]/12 border border-[#02c950]/25">
                   <FileText className="w-7 h-7 text-[#02c950]" />
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-white">PDF Reports &amp; Export</h3>
+                <h3 className="text-xl font-bold mb-3 text-white">{t.upgradeToPro.preview.reports.title}</h3>
                 <p className="text-gray-400 mb-4 text-sm leading-relaxed">
-                  Export a clean PDF summary of your people and their progress in one click — ready to share or keep as a record.
+                  {t.upgradeToPro.preview.reports.description}
                 </p>
                 <div className="bg-black/40 rounded-lg p-4 border border-white/5">
                   <div className="space-y-2">
@@ -436,19 +424,19 @@ export default function UpgradeToPro() {
             <div className="flex flex-wrap justify-center gap-8">
               <div className="flex items-center gap-2 text-gray-400">
                 <Shield className="w-5 h-5" />
-                <span>Secure payment</span>
+                <span>{t.upgradeToPro.trust.securePayment}</span>
               </div>
               <div className="flex items-center gap-2 text-gray-400">
                 <Zap className="w-5 h-5" />
-                <span>Instant activation</span>
+                <span>{t.upgradeToPro.trust.instantActivation}</span>
               </div>
               <div className="flex items-center gap-2 text-gray-400">
                 <Users className="w-5 h-5" />
-                <span>10,000+ Pro users</span>
+                <span>{t.upgradeToPro.trust.proUsers}</span>
               </div>
               <div className="flex items-center gap-2 text-gray-400">
                 <TrendingUp className="w-5 h-5" />
-                <span>Cancel anytime</span>
+                <span>{t.upgradeToPro.trust.cancelAnytime}</span>
               </div>
             </div>
           </div>

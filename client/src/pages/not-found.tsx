@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function NotFound() {
+  const { t } = useLanguage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textCanvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
@@ -327,8 +329,8 @@ export default function NotFound() {
             <div className="glass-box">
               <div className="scan-line"></div>
               <canvas className="error-code" ref={textCanvasRef}></canvas>
-              <div className="error-label">Signal lost</div>
-              <div className="error-sub">PAGE NOT FOUND · CONNEXION IMPOSSIBLE</div>
+              <div className="error-label">{t.notFound.signalLost}</div>
+              <div className="error-sub">{t.notFound.pageNotFound}</div>
             </div>
           </div>
         </div>

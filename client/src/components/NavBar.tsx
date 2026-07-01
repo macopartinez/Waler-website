@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { GlassText } from "@/components/GlassText";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 interface NavBarProps {
   /** Logo size in px (36 on marketing pages, 32 on app pages). */
@@ -40,9 +41,10 @@ export function NavBar({ logoSize = 32, center, actions }: NavBarProps) {
           </div>
         )}
 
-        {actions && (
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">{actions}</div>
-        )}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <LanguageSwitcher />
+          {actions}
+        </div>
       </div>
     </nav>
   );

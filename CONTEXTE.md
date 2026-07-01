@@ -1,328 +1,389 @@
-# Contexte du Projet Waler (Waler)
+# Contexte du Projet Waler
 
-## Dernière mise à jour : 5 Mai 2026
+## Dernière mise à jour : 28 Juin 2026
 
 ---
 
-## 🎯 Modifications Récentes
+## 🎯 Vue Rapide des Changements Majeurs
 
-### 1. Système de Vérification par Code (2FA)
-**Date**: Mai 2026
+| Période | Changement |
+|---------|-----------|
+| Avril 2026 | Fusion Prospects + Connections → People (Mode Pro) |
+| Avril 2026 | Améliorations UI/UX Mode Pro, ProSettingsModal |
+| Avril 2026 | Blocker Feature (blockType manuel vs auto) |
+| Mai 2026 | Système de Vérification 2FA avant paywall |
+| Mai 2026 | Extension Chrome Waler (remplace bots Playwright) |
+| Mai 2026 | Système de Détection Unfollowers via Extension |
+| Mai 2026 | Système de Classification Intelligente (scoring DMs) |
+| Mai 2026 | Collecte DMs en temps réel + Pro Conversation Collector |
+| Mai 2026 | Setting Coach (qualification DM) |
+| Mai 2026 | Surveillance Dashboard |
+| Mai 2026 | Système Pause/Reprise des Agents (changements de plan) |
+| Mai 2026 | Instagram Only (suppression Facebook) |
+| Juin 2026 | Correctifs bugs extension (compteur, unfollowers, auth) |
 
-#### Fonctionnalité
-Vérification obligatoire de l'accès Instagram **AVANT** le paywall pour garantir que l'utilisateur peut utiliser le service.
+---
 
-#### Flux Complet (17 étapes)
+## 🔌 Extension Chrome Waler
+
+### Architecture Générale
+
+L'extension remplace les bots Playwright (indétectable par Meta, temps réel, coût serveur minimal).
+
+```
+Instagram.com
+  └── Content Scripts (monde isolé)
+        ├── instagram-tracker.ts        ← orchestrateur principal
+        ├── unfollower-detector.ts      ← analyse unfollowers 2 phases
+        ├── instagram-search-automator.ts
+        ├── profile-analyzer.ts
+        ├── notification-checker.ts     ← détection via page /notifications/
+        ├── data-collector.ts           ← collecte filtrée (trackedUsername)
+        ├── dom-observer.ts
+        ├── instagram-api-interceptor.ts← écoute postMessage de page-interceptor
+        ├── instagram-modal-scroller.ts ← scroll modal followers
+        ├── follower-extractor.ts
+        ├── dm-interceptor.ts           ← STUB (constructor+init+getDMMessages)
+        ├── dm-message-extractor.ts     ← extraction messages DOM
+        ├── dm-thread-scroller.ts       ← scroll historique DM
+        ├── dm-analyzer.ts              ← analyse sémantique DMs (FR+EN)
+        ├── scoring-engine.ts           ← score 0-100 (5 composantes)
+        ├── conversation-dynamics.ts    ← dynamiques comportementales
+        ├── setting-coach.ts            ← coach qualification DM (setting)
+        ├── pro-conversation-collector.ts ← collecte DMs Pro (machine à états)
+        ├── pro-engagement-collector.ts ← engage posts/likes sans Playwright
+        ├── account-linker.ts
+        ├── action-recorder.ts
+        ├── auth-listener.ts
+        ├── confirm-dialog.ts
+        └── scan-overlay.ts
+  └── Injected Script (monde MAIN)
+        └── injected/page-interceptor.ts← intercepte window.fetch Instagram
+Background Service Worker
+  ├── service-worker.ts               ← handlers messages + notifications
+  ├── sync-manager.ts                 ← queue offline-first + retry
+  ├── classification-manager.ts       ← suggestions + validation
+  └── account-storage.ts
+Utils
+  ├── api-client.ts
+  ├── consent.ts                      ← consentement RGPD
+  ├── encryption.ts
+  ├── error-handler.ts
+  ├── surveillance-scheduler.ts
+  └── validation.ts
+```
+
+### Build & Chargement
+```bash
+cd waler-extension
+npm run build     # ou .\BUILD.bat
+# Charger depuis waler-extension/dist/ dans chrome://extensions/
+```
+
+### Points Techniques Clés
+
+- **Interception fetch** : `window.fetch` surchargé dans le monde isolé n'intercepte rien. Solution : `page-interceptor.ts` (world: MAIN, document_start) poste via `postMessage('WALER_PAGE_INTERCEPTOR')` ; `instagram-api-interceptor.ts` écoute.
+- **Compteur fiable** : `fetchRealFollowerCount()` utilise le cookie `ds_user_id` (compte connecté) → `https://i.instagram.com/api/v1/users/{id}/info/` (header `x-ig-app-id: 936619743392459`) → `user.follower_count`. Indépendant du profil affiché. Fallback : `web_profile_info` via username.
+- **`checkFollowerCountChange()`** : appelée toutes les 30s ; `ANOMALY_THRESHOLD=1000` (resync sans notif si diff > 1000) ; ignorée pendant `isScanning`.
+- **`cleanupCorruptedState()`** : appelée au démarrage, efface `unfollowerCount/lastFollowerCount` absurdes et badge.
+- **DataCollector** : `setTrackedUsername()` + filtre `username === trackedUsername` → évite 29 000 faux unfollowers.
+- **`apiToken`** : le service-worker lit `apiToken` (et non `token`) pour `POST /api/users/instagram-stats`.
+
+---
+
+## 🔍 Système de Détection des Unfollowers (Extension)
+
+### 2 Phases Distinctes
+
+**Phase 1 — Scan du modal followers** (`isScanning = true`)
+- Ouverture et scroll du modal followers sur le profil principal
+- Comparaison avec la base locale → liste des `missingFollowers`
+- `checkFollowerCountChange()` ignorée pendant le scan
+
+**Phase 2 — Navigation entre profils** (`unfollowerCheckState` localStorage + `isAnalyzing` chrome.storage)
+- Navigation automatique vers chaque profil manquant (`/@username`)
+- `profile-analyzer.ts` → classification : `blocked` / `deleted` / `unfollowed`
+- Retour automatique au profil principal après chaque profil
+- Envoi résultats backend + déclenchement Agent B si nécessaire
+- Nettoyage localStorage + `isAnalyzing` quand terminé
+
+### Protection Anti-Interruption (`instagram-tracker.ts`)
+
+```
+init() appelé à chaque navigation :
+  1. checkCurrentPageForUnfollower() EN PREMIER (continue l'analyse phase 2)
+  2. Si isScanning → bloque init(), réessai 2s
+  3. Si unfollowerCheckState || isAnalyzing → bloque init(), réessai 3s
+     Log: "⏸️ Init bloqué : analyse unfollower en cours (navigation entre profils)"
+```
+
+### Suppression Automatique de l'Historique de Recherche
+
+Après chaque profil vérifié, `instagram-search-automator.clearSearchHistory(username)` :
+- Ouvre la barre de recherche Instagram
+- Détecte et supprime l'entrée par aria-label / SVG X / siblings
+- Délai naturel de 300ms → aucune trace dans l'historique
+- Fonctionne même en cas d'erreur ou de timeout
+
+### Fichiers Concernés
+- `waler-extension/src/content/unfollower-detector.ts`
+- `waler-extension/src/content/instagram-search-automator.ts`
+- `waler-extension/src/content/profile-analyzer.ts`
+- `waler-extension/src/content/instagram-tracker.ts`
+
+---
+
+## 🧠 Système de Classification Intelligente
+
+### Scoring Multi-Critères (0-100)
+
+| Composante | Points | Source |
+|-----------|--------|--------|
+| DMs | 30 | `dm-analyzer.ts` (mots-clés FR+EN) |
+| Engagement | 25 | Likes, commentaires, stories |
+| Activité | 20 | Fréquence des interactions |
+| Ancienneté | 10 | Durée de la relation |
+| Réciprocité | 15 | Follow mutuel, réponses |
+
+### Workflow Complet
+```
+Extension collecte données
+  → scoring-engine.ts calcule score (0-100)
+  → Détection de transition potentielle
+  → classification-manager.ts crée suggestion (avec raison + preuves)
+  → Notification badge popup
+  → Utilisateur accepte/rejette dans suggestions.html
+  → BDD mise à jour + historique
+```
+
+### Catégories de Contacts
+- `lead` → `prospect` → `client` → `converted`
+- `network` (relation informelle)
+
+### Mots-Clés DM Analysés (`dm-analyzer.ts`)
+- **Client** : merci, résultat, progrès, coaching, séance, paiement…
+- **Prospect** : intéressé, prix, tarif, info, disponibilité, rdv…
+- **Network** : salut, cool, bravo, félicitations…
+
+### Tables Base de Données
+- `contact_scores` — score détaillé par contact
+- `classification_suggestions` — suggestions en attente (pending/accepted/rejected)
+- `classification_history` — historique des transitions
+
+### Routes API
+- `POST /api/extension/analyze-contact`
+- `POST /api/extension/suggest-transition`
+- `POST /api/extension/validate-suggestion`
+- `GET /api/extension/pending-suggestions`
+- `POST /api/extension/log-transition`
+
+### Frontend Classification
+- `client/src/components/classification/ClassificationDashboard.tsx`
+- `client/src/components/classification/ClassificationStats.tsx`
+- `client/src/components/classification/ContactScores.tsx`
+- `client/src/components/classification/DMConversations.tsx`
+- `client/src/components/classification/SuggestionsList.tsx`
+- `client/src/components/classification/PrivacySettings.tsx`
+
+---
+
+## 💬 Collecte DMs & Pro Conversation Collector
+
+### DMInterceptor (STUB)
+`dm-interceptor.ts` est un stub minimal (constructor + init + getDMMessages). `startDMSync` vérifie `typeof .start === 'function'` avant d'appeler. L'initialisation DM est reordonnée après `startFollowerCountMonitoring`.
+
+### DM Thread Scroller
+`dm-thread-scroller.ts` : scroll vers le haut d'un thread pour charger l'historique complet. Analyse incrémentale : s'arrête si les `messageId` connus sont retrouvés.
+
+### DM Message Extractor
+`dm-message-extractor.ts` : extraction structurée des messages (texte, média, reactions, timestamp, direction).
+
+### Pro Conversation Collector
+`pro-conversation-collector.ts` : orchestre l'analyse complète d'une conversation DM pour la section Pro.
+- **Machine à états persistée** dans `chrome.storage.local` (`proAnalysisState`) — survit aux reloads de navigation
+- Phases : `goto_inbox` → recherche → détection non-lu → scroll → extraction → analyse → mise à jour stats
+- Utilise `DMThreadScroller`, `DMMessageExtractor`, `ScoringEngine`, `DMAnalyzer`, `ConversationDynamicsAnalyzer`, `SettingCoach`
+
+### Pro Engagement Collector
+`pro-engagement-collector.ts` : remplace l'agent Python Playwright (`agent_pro_circle.py`).
+- Clique chaque vignette de la grille pour ouvrir le post en **modal** (accès likes + commentaires)
+- Note les People qui ont commenté/liké → envoi backend via `SYNC_PRO_ENGAGEMENT`
+- État persisté dans `chrome.storage.local` — aucun rechargement pendant la boucle
+
+### Setting Coach
+`setting-coach.ts` : coach de qualification DM basé sur la méthodologie "setting".
+- **4 phases** : Connexion → Situation → Problème → Transition (vers un call)
+- Déduit la phase depuis le contenu des messages reçus (heuristique FR)
+- Extrait : budget, timeline, goal, activité, objections du prospect
+- Calcule `EmotionalState` (hot/neutral/cold/skeptical) et `Momentum` (accelerating/steady/cooling)
+- Complémentaire de `DMAnalyzer` (intention) et `ConversationDynamicsAnalyzer` (comportement)
+
+### Tables DMs
+- `dm_messages` — messages individuels
+- `dm_conversations` — métadonnées conversation
+- `dm_stats` — statistiques par contact (temps de réponse, longueur, initiateur)
+- Vues : `v_recent_conversations`, `v_dm_global_stats`
+
+### Routes DMs
+- `POST /api/extension/sync-dms`
+- `GET /api/extension/dm-conversations`
+- `GET /api/extension/dm-stats/:username`
+- `POST /api/extension/analyze-dms`
+
+---
+
+## 🛡️ Surveillance Dashboard
+
+- `client/src/components/surveillance/SurveillanceDashboard.tsx`
+- `waler-extension/src/utils/surveillance-scheduler.ts`
+- `server/init_surveillance_tables.sql` — tables de surveillance
+
+---
+
+## ⏸️ Système Pause/Reprise des Agents
+
+### Comportement lors des Changements de Plan
+
+| Scénario | Agents Affectés | Action | Données |
+|----------|----------------|--------|---------|
+| Pro → Premium | Prospects, Connections, Clients | ⏸️ Pause (`plan_downgrade`) | ✅ Préservées |
+| Premium → Pro | Prospects, Connections, Clients | ▶️ Reprise automatique | ✅ Préservées |
+| Annulation | Tous | ⏹️ Arrêt | ✅ Préservées |
+
+- Table `agent_states` : `agent_type`, `status` (active/paused/stopped), `pause_reason`, `last_run_at`, `metadata`
+- Les agents Pro ne se reprennent **pas** si la pause était manuelle (`pausedByPlanChange !== true`)
+- Wrapper `withAgentCheck(userId, agentType, fn)` — vérifie plan + statut avant chaque exécution
+- Intégration dans `server/plan-migration.ts`
+
+---
+
+## 🚫 Blocker Feature
+
+- **`blockType`** : `'deleted_account'` (auto-détecté par l'extension) | `'manually_marked'` (action utilisateur)
+- **`UnfollowerModal.tsx`** : affiche les infos unfollower + lien profil Instagram + 2 options + message psychologique si "blocked"
+- **Route** : `POST /api/unfollowers/:id/mark-as-blocker` → déplace vers table `blockers`
+- Dashboard integration : badges 🗑️ (deleted) et 🚫 (manually marked)
+
+---
+
+## 🔐 Système de Vérification 2FA (Onboarding)
+
+### Flux d'Onboarding (17 étapes)
 ```
 1-10.  Questionnaire psychologique
 11.    Username Instagram
 12.    ✅ Vérification que le compte existe
-13.    📱 Envoi code + Vérification code 6 chiffres
+13.    📱 Code 6 chiffres envoyé par DM @waler
 14.    💰 PAYWALL
 15.    Email
 16.    Password
 17.    → Création compte + Activation agents
 ```
 
-#### Implémentation Technique
-- **Bot Waler** : Compte Instagram `@waler` qui envoie les codes
-- **Table `verification_codes`** : Stocke les codes à 6 chiffres
-- **Script `generate-6digit.ts`** : Génère les codes de vérification
-- **Expiration** : 15 minutes
-- **Tentatives** : Maximum 5 par utilisateur
-
-#### Sécurité
-- ✅ Code inclut le @username de l'utilisateur
-- ✅ Vérification que l'expéditeur correspond au @username
-- ✅ Protection contre l'usurpation d'identité
-- ✅ Rate limiting sur les tentatives
-
-#### Fichiers Concernés
-- `server/verification-codes.ts` - Gestion des codes
-- `server/waler-onboarding-bot.ts` - Bot d'envoi de codes
-- `scripts/generate-6digit.ts` - Génération de codes
-- `client/src/pages/OnboardingPage.tsx` - Interface de vérification
-- `CODE_VERIFICATION_AVANT_PAYWALL.md` - Documentation complète
-
----
-
-### 2. Système d'Authentification Sécurisé
-**Date**: Mai 2026
-
-#### Fonctionnalités de Sécurité
-- **Hashage bcrypt** - Mots de passe hashés avec 12 rounds
-- **Sessions sécurisées** - Cookies HttpOnly + Secure en production
-- **Rate limiting** - 5 tentatives/minute sur routes auth
-- **Protection CSRF** - Cookies SameSite=lax
-- **Validation inputs** - Zod schemas côté client et serveur
-- **Ownership checks** - Users ne peuvent accéder qu'à leurs données
-- **Session regeneration** - Protection contre session fixation
-- **Auto-logout** - Sessions expirent après 7 jours
-
-#### Routes API
-- `POST /api/auth/register` - Inscription
-- `POST /api/auth/login` - Connexion
-- `POST /api/auth/logout` - Déconnexion
-- `GET /api/auth/me` - Utilisateur courant
-- `POST /api/auth/verification/generate` - Générer code de vérification
-- `POST /api/auth/verification/verify` - Vérifier code
-- `POST /api/auth/verification/resend` - Renvoyer code
-
-#### Fichiers Concernés
-- `server/auth.ts` - Logique d'authentification
-- `server/middleware.ts` - Middlewares de sécurité
-- `server/verification.ts` - Système de vérification
-- `server/routes.ts` - Routes API
-- `SECURITY_SETUP.md` - Guide de configuration
-
----
-
-### 3. Fusion Prospects + Connections → People (Mode Pro)
-**Date**: Avril 2026
-
-#### Problème Initial
-- Prospects et Connections étaient gérés séparément avec code dupliqué
-- Problèmes de persistance des données dans localStorage
-- UI incohérente entre les deux sections
-
-#### Solution Implémentée
-- **Création du modèle unifié `Person`** (`client/src/components/pro/types.ts`)
-  - Type `PersonTag`: `'prospect' | 'vip' | 'keep' | 'watch' | 'client' | 'converted'`
-  - Type `ProspectStatus`: `'cold' | 'warm' | 'hot' | 'converted'`
-  - Type `Circle`: `'vip' | 'keep' | 'watch'`
-  - Fonctions utilitaires: `hasTag()`, `isProspect()`, `isInCircle()`, `getDisplayBadges()`
-
-- **Nouveaux composants créés**:
-  - `PersonCard.tsx` - Carte unifiée pour afficher une personne
-  - `AddPersonModal.tsx` - Modal unifié pour ajouter prospect/connexion avec texte d'aide
-  - `PersonDetailView.tsx` - Vue détaillée avec scores, statuts, signaux et notes
-  - `AddFollowerChoiceModal.tsx` - Modal pour choisir d'ajouter un follower comme Client ou People
-
-- **Refactoring ProDashboard**:
-  - Migration automatique des données `pro-prospects` et `pro-connections` vers `pro-people`
-  - Filtrage par tags (`all`, `prospect`, `vip`, `keep`, `watch`, `client`, `converted`)
-  - Suppression des anciens composants après migration
-
-#### Fichiers Modifiés
-- `client/src/components/pro/types.ts` (nouveau)
-- `client/src/components/pro/PersonCard.tsx` (nouveau)
-- `client/src/components/pro/AddPersonModal.tsx` (nouveau)
-- `client/src/components/pro/PersonDetailView.tsx` (nouveau)
-- `client/src/components/pro/AddFollowerChoiceModal.tsx` (nouveau)
-- `client/src/components/pro/ProDashboard.tsx` (refactoré)
-
----
-
-### 4. Améliorations UI/UX Mode Pro
-**Date**: Avril-Mai 2026
-
-#### Fond d'Animation dans les Cartes People
-- Ajout de l'animation `blob` dans `tailwind.config.ts`
-- Classes CSS `animation-delay-2000` et `animation-delay-4000` dans `index.css`
-- Blobs animés colorés (vert, violet, bleu) avec effet `mix-blend-multiply`
-
-#### Icônes Minimalistes
-- Remplacement des émojis par des icônes Lucide
-- Exemple: 📂 → `<Folder className="w-3 h-3" />`
-
-#### Bouton Settings Flottant
-- Bouton circulaire en bas à gauche (identique au mode Personnel)
-- Gradient vert avec rotation de l'icône au hover
-- Position: `fixed bottom-6 left-6 z-50`
-
-#### ProSettingsModal Complet
-- **Tab Account**: Information du compte et Logout
-- **Tab Notifications**: 4 options (New unfollowers, New blockers, Weekly summary, Product updates)
-- **Tab Privacy**: 3 options (Make profile private, Hide online status, Data collection)
-- **Tab Display**: Désactiver l'animation de fond
-- **Tab Data**: Effacer toutes les données locales
-
-#### Fichiers Modifiés
-- `tailwind.config.ts` (animation blob)
-- `client/src/index.css` (delays animation)
-- `client/src/components/pro/PersonCard.tsx` (fond animé + icônes)
-- `client/src/components/pro/ProDashboard.tsx` (bouton settings)
-- `client/src/components/pro/ProSettingsModal.tsx` (nouveau)
-
----
-
-### 5. Système de Goals dans les Milestones
-**Date**: Mai 2026
-
-#### Fonctionnalité
-Ajout d'objectifs automatiques dans les milestones clients que les agents Pro peuvent cocher automatiquement.
-
-#### Types de Goals Disponibles
-1. **Followers** - Nombre de followers cible
-2. **Views** - Nombre de vues cible
-3. **Posts Daily** - Publications quotidiennes (récurrent)
-4. **Posts Weekly** - Publications hebdomadaires (récurrent)
-5. **Posts Monthly** - Publications mensuelles (récurrent)
-6. **Custom** - Objectif personnalisé
-
-#### Milestones Récurrents
-Les milestones avec goals quotidiens, hebdomadaires ou mensuels se dupliquent automatiquement :
-
-**Fonctionnement** :
-- Le milestone original devient un "template" (modèle)
-- À minuit (timezone du client), de nouvelles instances sont créées automatiquement
-- Les instances sont regroupées par `recurringGroupId`
-- Chaque instance a une `instanceDate` spécifique
-
-**Timezone Client** :
-- Propriété `timezone` ajoutée dans `Client` (ex: "Europe/Paris")
-- Les milestones se créent à minuit du fuseau horaire du client
-- Vérification toutes les heures pour créer les instances manquantes
-
-**Groupement** :
-- Les instances récurrentes sont regroupées visuellement
-- Tri par date (plus récent en premier)
-- Affichage condensé avec expansion possible
-
-#### Implémentation Technique
-```typescript
-type GoalType = 'followers' | 'views' | 'posts_daily' | 'posts_weekly' | 'posts_monthly' | 'custom';
-
-type Milestone = {
-  id: string;
-  title: string;
-  completed: boolean;
-  status: 'success' | 'failed' | null;
-  date: Date | null;
-  deadline: Date | null;
-  deadlineSetAt: Date | null;
-  createdAt: Date;
-  goalType?: GoalType;
-  goalTarget?: number;
-  goalCurrent?: number; // Auto-updated by agents
-  isRecurring?: boolean; // True if auto-duplicates
-  recurringGroupId?: string; // Groups instances together
-  recurringPeriod?: 'daily' | 'weekly' | 'monthly';
-  instanceDate?: Date; // Specific date for this instance
-};
-
-interface Client {
-  // ... existing fields
-  timezone?: string; // e.g., "Europe/Paris", "America/New_York"
-}
-```
-
-#### Logique de Création Automatique
-1. **Daily** : Crée une instance pour chaque jour à minuit
-2. **Weekly** : Crée une instance au début de chaque semaine (dimanche)
-3. **Monthly** : Crée une instance au début de chaque mois (1er jour)
-
-#### Modal "Ajouter un Milestone"
-- Champ titre (obligatoire)
-- Sélecteur de type d'objectif (optionnel)
-- Champ valeur cible (conditionnel)
-- Message: "Les agents Pro cocheront automatiquement ce milestone quand l'objectif sera atteint"
-- Style sombre pour le sélecteur (`colorScheme: 'dark'`)
-- Détection automatique si le goal est récurrent (posts_daily/weekly/monthly)
-
-#### Fichiers Modifiés
-- `client/src/components/pro/ClientDetailView.tsx`
-- `client/src/components/pro/ClientCard.tsx` (ajout timezone)
+### Implémentation
+- Bot `@waler` (Instagram) envoie les codes par DM
+- Table `verification_codes` : code, expiration 15 min, max 5 tentatives
+- `server/verification-codes.ts`, `server/waler-onboarding-bot.ts`
 
 ---
 
 ## 🏗️ Architecture Actuelle
 
-### Mode Personnel
-- Dashboard avec sphère interactive
-- Sections: Followers, Unfollowers, Blockers
-- Graphiques et statistiques Instagram
-- SettingsModal avec 4 tabs
+### Mode Personnel (Dashboard)
+- Sphère interactive + statistiques Instagram
+- Sections : Followers, Unfollowers, Blockers
+- Extension Chrome → source des données (remplace agents Playwright)
+- `SettingsModal` avec 4 tabs
 
 ### Mode Pro
-- **Clients**: Gestion des clients payants avec milestones et goals
-- **People**: Gestion unifiée des prospects et connexions
-  - Filtres: All, Prospect, VIP, Keep, Watch, Client, Converted
-  - Cartes avec fond animé
-  - Vue détaillée avec scores et signaux
-- **Settings**: Modal complet avec 5 tabs
+- **Clients** : CRM avec milestones, goals (followers/views/posts), timezone
+- **People** : Gestion unifiée prospects + connexions
+  - Tags : `prospect | vip | keep | watch | client | converted`
+  - Scoring automatique via extension
+  - Vue détaillée avec scores, signaux, notes, historique DMs
+- **Classification** : Dashboard suggestions de transition de catégorie
+- **Settings** : `ProSettingsModal` avec 5 tabs
+- **Tutorial** : `ProTutorial.tsx`
+
+### Waler Extension (Client-side Agents)
+- Remplace les agents Python/Playwright côté collecte
+- Multi-collecteurs : followers, unfollowers, DMs, engagement, posts
 
 ---
 
-## 📦 Agents
+## 📦 Agents Backend
 
-### Agent A (Unfollowers)
-- Détection des unfollows via snapshots Instagram
-- Base de données PostgreSQL
-- Planification cron
+### Agent A → Extension Chrome (Unfollowers)
+- Détection via extension (modal scroll + navigation profils)
+- Résultats envoyés au backend via `POST /api/extension/verify-missing-followers`
 - Stockage dans table `unfollowers`
 
 ### Agent B (Follow Automatique)
 - Follow automatique avec Playwright
-- Gestion des cookies et sessions
-- Follow des nouveaux clients après paiement
-- Système de retry et gestion d'erreurs
+- Déclenché par l'extension après classification unfollower
+- Gestion cookies, sessions, retry
 
 ### Agent C (Tracking Clients Pro)
 - Métriques et milestones
-- Comportement humain
-- Intégration dashboard
 - Auto-complétion des goals
-- Tracking des posts quotidiens/hebdomadaires/mensuels
+- Tracking posts quotidiens/hebdomadaires/mensuels
 
-### Agent Connections (Pro)
-- Analyse qualité relationnelle
-- Scraping avec Playwright
-- Calcul des scores de santé (0-100)
-- Génération du contexte relationnel
-- **Connexions mutuelles** : Détecte les followers en commun
-- **Corrélation Follow/Unfollow** : Analyse les patterns de likes
-- Table `mutual_connections` pour stocker les connexions
+### Agent Connections → Extension Chrome (Pro)
+- Remplacé par `pro-engagement-collector.ts` pour la collecte
+- Scraping modal posts, likes, commentaires sans Playwright
+- Scores de santé relationnelle (0-100)
+- Tables `mutual_connections`, `follow_like_correlations`
 
-### Agent Prospects (Pro)
-- Détection nouveaux followers
-- Scoring automatique basé sur engagement
+### Agent Prospects → Extension Chrome (Pro)
+- Détection nouveaux followers via `notification-checker.ts`
+- Scoring automatique basé sur engagement + DMs
 - Intégration avec People
-- Signaux d'opportunité (nouveau follower, engagement élevé, etc.)
 
 ### Agent Waler (Onboarding)
-- Bot Instagram `@waler` pour envoi de codes de vérification
-- Écoute des messages entrants
-- Génération et envoi de codes à 6 chiffres
-- Vérification de l'identité de l'expéditeur
-- Gestion des sessions Playwright
+- Bot Instagram `@waler` pour codes de vérification
+- Gestion sessions Playwright
 
 ---
 
 ## 🗄️ Stockage des Données
 
-### Base de Données PostgreSQL
+### Base de Données (SQLite / PostgreSQL)
 
 #### Tables Principales
-- `users` - Utilisateurs avec authentification sécurisée
-- `unfollowers` - Historique des unfollows
-- `blockers` - Comptes bloquants détectés
-- `followers` - Nouveaux followers
-- `verification_codes` - Codes de vérification 2FA
-- `subscriptions` - Abonnements Stripe
-- `plans` - Plans tarifaires (Free, Premium, Pro)
-- `plan_change_history` - Historique des changements de plan
+- `users` — authentification sécurisée
+- `unfollowers` — historique des unfollows
+- `blockers` — comptes bloquants (`blockType`)
+- `followers` — nouveaux followers
+- `verification_codes` — codes 2FA
+- `subscriptions` — abonnements Stripe
+- `plans` — Free / Premium / Pro
+- `plan_change_history`
+- `agent_states` — statut des agents (active/paused/stopped)
 
-#### Tables Pro (Mode Pro)
-- `pro_clients` - Clients payants
-- `pro_people` - Personnes (prospects + connexions)
-- `pro_milestones` - Objectifs clients
-- `pro_notes` - Notes sur clients/personnes
-- `circle_members` - Membres du cercle (VIP/Keep/Watch)
-- `mutual_connections` - Connexions mutuelles détectées
-- `follow_like_correlations` - Corrélations follow/like
+#### Tables Pro
+- `pro_clients`, `pro_people`, `pro_milestones`, `pro_notes`
+- `circle_members`, `mutual_connections`, `follow_like_correlations`
 
-### localStorage Keys (Cache Frontend)
-- `pro-clients` - Cache clients payants
-- `pro-people` - Cache personnes
-- `client-{id}-milestones` - Cache milestones
-- `client-{id}-notes` - Cache notes
-- `disableBackgroundAnimation` - Préférence d'animation
+#### Tables Extension/Classification
+- `contact_scores` — score 0-100 par contact
+- `classification_suggestions` — suggestions en attente
+- `classification_history` — historique des transitions
+- `dm_messages`, `dm_conversations`, `dm_stats`
+- Tables surveillance (`init_surveillance_tables.sql`)
 
-### Migration
-- Anciennes clés `pro-prospects` et `pro-connections` migrées vers `pro-people`
-- Système de migration automatique au démarrage
-- Préservation des données lors des changements de plan
+### Chrome Storage (Extension)
+- `followerDatabase` — base locale followers + `totalCount` (toujours synchronisé)
+- `apiToken` — token d'authentification backend
+- `isAnalyzing` — indicateur phase 2 analyse unfollowers
+- `proAnalysisState` — état machine à états Pro Conversation Collector
+
+### localStorage (Instagram Tab)
+- `unfollowerCheckState` — état phase 2 analyse unfollowers (currentIndex, missingFollowers, results)
+- Conversations DM (nettoyage auto > 30 jours)
+
+### localStorage (Dashboard Frontend)
+- `pro-clients`, `pro-people`, `client-{id}-milestones`, `client-{id}-notes`
+- `disableBackgroundAnimation`
 
 ---
 
@@ -335,10 +396,9 @@ interface Client {
 - Borders: `border-white/10`, `border-white/20`
 
 ### Animations
-- `animate-blob` - Blobs de fond (7s infinite)
-- `animation-delay-2000` - Delay 2s
-- `animation-delay-4000` - Delay 4s
-- Hover effects: `hover:y-4`, `hover:scale-105`
+- `animate-blob` — Blobs fond (7s infinite)
+- `animation-delay-2000` / `animation-delay-4000`
+- Hover: `hover:scale-105`
 
 ### Typographie
 - Display: Outfit
@@ -350,115 +410,74 @@ interface Client {
 ## 🔧 Stack Technique
 
 ### Frontend
-- React + TypeScript
-- Vite
-- TailwindCSS
-- Framer Motion
-- Lucide Icons
-- Recharts
+- React + TypeScript, Vite, TailwindCSS
+- Framer Motion, Lucide Icons, Recharts
 
 ### Backend
-- Node.js + Express
-- PostgreSQL
-- Playwright (scraping)
+- Node.js + Express, SQLite (`waler.db`) / PostgreSQL
+- Playwright (Agent B uniquement)
+
+### Extension Chrome
+- TypeScript + esbuild (pas de type-check au build)
+- `webextension-polyfill`
+- Content Scripts (monde isolé) + Injected Script (monde MAIN)
+- Service Worker (Manifest V3)
+
+---
+
+## 🐛 Bugs Corrigés (Extension)
+
+1. **window.fetch isolé** → `page-interceptor.ts` en monde MAIN + postMessage
+2. **DMInterceptor crash** → stub vérifié avec `typeof`, monitoring avant DM
+3. **29 000 faux unfollowers** → `DataCollector.setTrackedUsername()` + filtre + `ANOMALY_THRESHOLD=1000` + `cleanupCorruptedState()`
+4. **Dashboard non synchro** → `apiToken` (et non `token`) dans service-worker
+5. **totalCount désynchronisé** → auto-fix au chargement + avant chaque sauvegarde
+6. **Analyse unfollower interrompue** → `checkCurrentPageForUnfollower()` appelé en premier dans `init()` + blocage conditionnel
 
 ---
 
 ## 📝 Prochaines Étapes
 
-1. **Amélioration Agent Waler**
-   - Gestion automatique des codes expirés
-   - Notifications push pour nouveaux codes
-   - Interface admin pour monitoring
-
-2. **Tableau de Bord Agents**
-   - Vue d'ensemble de tous les agents actifs
-   - Logs en temps réel
-   - Statistiques de performance
-   - Contrôles start/stop/restart
-
-3. **Notifications Push**
-   - Implémenter les préférences de notifications
-   - Webhooks pour événements importants
-   - Alertes pour milestones atteints
-
-4. **Analytics Avancés**
-   - Graphiques de croissance détaillés
-   - Prédictions basées sur l'historique
-   - Rapports hebdomadaires automatiques
-
-5. **Mode Pro - Fonctionnalités Avancées**
-   - Export des données en CSV/PDF
-   - Intégration calendrier pour milestones
-   - Templates de notes prédéfinis
-
----
-
-## 🐛 Bugs Connus
-
-### Aucun bug critique connu
-
-✅ Tous les systèmes principaux sont fonctionnels :
-- Authentification et sécurité
-- Vérification 2FA par code
-- Agents A, B, C
-- Mode Pro complet
-- Système de paiement Stripe
-- Milestones et goals
-
-### Améliorations Futures
-- Optimisation des performances de scraping
-- Réduction de la consommation mémoire des agents
-- Amélioration de la gestion des erreurs réseau
+1. **Intégration Extension ↔ Agents Backend** — système de relais
+2. **Dashboard Surveillance** — visualisation complète
+3. **Notifications Push** — webhooks sur milestones atteints
+4. **Analytics Avancés** — graphiques de croissance, prédictions
+5. **Mode Pro** — export CSV/PDF, templates notes
+6. **Chrome Web Store** — publication de l'extension
 
 ---
 
 ## 📚 Documentation Associée
 
-### Guides Principaux
-- `README.md` - Vue d'ensemble du projet
-- `QUICKSTART.md` - Démarrage rapide
-- `DEMARRAGE_RAPIDE.md` - Guide de démarrage en français
+### Extension
+- `WALER_EXTENSION_ARCHITECTURE.md` — architecture complète
+- `CHANGELOG_UNFOLLOWER_SYSTEM.md` — historique système unfollowers
+- `UNFOLLOWER_DETECTION_SYSTEM.md` — système de détection
+- `FOLLOWER_COUNT_SYNC_FIX.md` — fix compteur
+- `CLASSIFICATION_SYSTEM_READY.md` — système de classification
+- `DM_COLLECTION_READY.md` — collecte DMs
+- `SERVICE_WORKER_COMPLETE.md` — handlers service worker
+- `EXTENSION_AUTH_FIX.md`, `EXTENSION_TESTING_GUIDE.md`
 
-### Sécurité & Authentification
-- `SECURITY_SETUP.md` - Configuration sécurité complète
-- `2FA_SETUP.md` - Configuration 2FA
-- `CODE_VERIFICATION_AVANT_PAYWALL.md` - Système de vérification par code
-- `IMPLEMENTATION_SUPABASE_VERIFICATION.md` - Implémentation Supabase
+### Agents & Pro
+- `AGENT_CONNECTIONS_GUIDE.md`, `AGENT_C_GUIDE.md`, `AGENT_PROSPECTS_GUIDE.md`
+- `AGENT_PRO_GUIDE.md`, `AGENT_FOLLOW_SYSTEM.md`, `AGENT_WALER_README.md`
+- `AGENT_PAUSE_RESUME_SYSTEM.md` — système pause/reprise
+- `AGENTS_PRO_COMPLETE.md`, `AUTO_TRIGGER_AGENTS_README.md`
 
-### Agents
-- `AGENT_CONNECTIONS_GUIDE.md` - Guide Agent Connections
-- `AGENT_C_GUIDE.md` - Guide Agent C
-- `AGENT_PROSPECTS_GUIDE.md` - Guide Agent Prospects
-- `AGENT_PRO_GUIDE.md` - Guide complet Mode Pro
-- `AGENT_FOLLOW_SYSTEM.md` - Système de follow automatique
-- `AGENT_WALER_README.md` - Bot Waler pour onboarding
-- `AGENTS_PRO_COMPLETE.md` - Fonctionnalités complètes agents Pro
-- `AUTO_TRIGGER_AGENTS_README.md` - Déclenchement automatique
+### Sécurité & Auth
+- `SECURITY_SETUP.md`, `2FA_SETUP.md`, `CODE_VERIFICATION_AVANT_PAYWALL.md`
 
 ### Monétisation
-- `STRIPE_SETUP.md` - Configuration Stripe
-- `PREMIUM_SETUP.md` - Configuration Premium
-- `GUIDE_CHANGEMENT_PLAN.md` - Changement de plan
-- `PLAN_CHANGE_DATA_PRESERVATION.md` - Préservation des données
-- `TUNNEL_DE_VENTE.md` - Tunnel de conversion
+- `STRIPE_SETUP.md`, `PREMIUM_SETUP.md`, `GUIDE_CHANGEMENT_PLAN.md`
+- `PLAN_CHANGE_DATA_PRESERVATION.md`, `TUNNEL_DE_VENTE.md`
 
 ### Flux & UX
-- `NOUVEAU_FLUX_ONBOARDING.md` - Nouveau flux d'onboarding
-- `FLUX_FINAL_COMPLET.md` - Flux complet de l'application
-- `AMELIORATIONS_UX.md` - Améliorations UX
-- `VERIFICATION_AVANT_PAYWALL.md` - Vérification avant paiement
-
-### Historique & Fixes
-- `CHANGELOG.md` - Historique des modifications
-- `FIX_SAUVEGARDE_PROSPECTS_CONNECTIONS.md` - Historique des fixes
-- `IMPLEMENTATION_COMPLETE.md` - Résumé implémentation
-- `INTEGRATION_COMPLETE.md` - Intégration complète
+- `NOUVEAU_FLUX_ONBOARDING.md`, `FLUX_FINAL_COMPLET.md`, `AMELIORATIONS_UX.md`
 
 ---
 
 ## 👥 Contributeurs
 
 - Développement principal: Cascade AI + User
-- Design: Basé sur Figma mockups
 - Architecture: Évolution itérative basée sur feedback utilisateur

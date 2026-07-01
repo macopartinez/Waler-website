@@ -3,37 +3,19 @@ import { useLocation } from "wouter";
 import { RadarBackground } from "@/components/RadarBackground";
 import { BackgroundWaler } from "@/components/BackgroundWaler";
 import { GlassText } from "@/components/GlassText";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ArrowRight, Heart, Users, TrendingDown, Shield } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Storytelling() {
   const [, navigate] = useLocation();
+  const { t } = useLanguage();
 
-  const storyBeats = [
-    {
-      icon: Users,
-      title: "You built something real",
-      description: "Every follower represents a connection. A person who chose to see your content, to be part of your journey.",
-      color: "text-green-400"
-    },
-    {
-      icon: Heart,
-      title: "But relationships change",
-      description: "Some stay. Some fade away. Some disappear without a trace. And you're left wondering... what happened?",
-      color: "text-green-400"
-    },
-    {
-      icon: TrendingDown,
-      title: "The invisible exodus",
-      description: "They unfollow in silence. They block without explanation. Your numbers drop, but you never know who or why.",
-      color: "text-green-400"
-    },
-    {
-      icon: Shield,
-      title: "Until now",
-      description: "Waler reveals the truth. See exactly who unfollowed, who blocked you, and when it happened. No more guessing.",
-      color: "text-green-400"
-    }
-  ];
+  const storyBeats = t.storytelling.beats.map((beat, i) => ({
+    ...beat,
+    icon: [Users, Heart, TrendingDown, Shield][i],
+    color: "text-green-400",
+  }));
 
   return (
     <div className="min-h-screen bg-transparent font-body text-white relative overflow-hidden">
@@ -46,12 +28,15 @@ export default function Storytelling() {
           <button onClick={() => navigate("/")}>
             <GlassText text="WALER" fontSize={36} />
           </button>
-          <button
-            onClick={() => navigate("/onboard")}
-            className="text-base font-bold px-6 py-2.5 rounded-full transition-all duration-300 bg-[#02c950]/20 backdrop-blur-md border border-white/20 hover:shadow-[0_0_20px_rgba(2,201,80,0.4)] hover:bg-[#02c950]/30 text-white"
-          >
-            Start Tracking Free
-          </button>
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher />
+            <button
+              onClick={() => navigate("/onboard")}
+              className="text-base font-bold px-6 py-2.5 rounded-full transition-all duration-300 bg-[#02c950]/20 backdrop-blur-md border border-white/20 hover:shadow-[0_0_20px_rgba(2,201,80,0.4)] hover:bg-[#02c950]/30 text-white"
+            >
+              {t.storytelling.nav.cta}
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -66,10 +51,10 @@ export default function Storytelling() {
             className="text-center mb-24"
           >
             <h1 className="text-5xl md:text-7xl font-display font-black leading-tight mb-6 text-white tracking-tighter">
-              Every follower has a <span className="text-gradient">story</span>
+              {t.storytelling.hero.title} <span className="text-gradient">{t.storytelling.hero.titleHighlight}</span>
             </h1>
             <p className="text-xl md:text-2xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
-              And every story deserves to be known
+              {t.storytelling.hero.subtitle}
             </p>
           </motion.div>
 
@@ -112,13 +97,13 @@ export default function Storytelling() {
             className="text-center mt-32"
           >
             <h2 className="text-4xl md:text-6xl font-display font-black mb-8 text-white tracking-tighter">
-              Ready to know the <span className="text-gradient">truth</span>?
+              {t.storytelling.cta.title} <span className="text-gradient">{t.storytelling.cta.titleHighlight}</span>
             </h2>
             <button
               onClick={() => navigate("/onboard")}
               className="text-lg px-10 py-5 rounded-full transition-all duration-300 bg-[#02c950]/20 backdrop-blur-md border border-white/20 hover:shadow-[0_0_30px_rgba(2,201,80,0.5)] hover:bg-[#02c950]/30 font-bold text-white inline-flex items-center gap-3"
             >
-              Start Your Journey <ArrowRight className="w-6 h-6" />
+              {t.storytelling.cta.button} <ArrowRight className="w-6 h-6" />
             </button>
           </motion.div>
         </div>

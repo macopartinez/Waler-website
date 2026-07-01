@@ -1,9 +1,11 @@
 import { motion } from "framer-motion";
 import { Sparkles, Check, Users, Star } from "lucide-react";
 import { QuestionnaireAnswers, UsageMode } from "@/types/questionnaire";
-import { PRICING_PLANS } from "@/config/pricing";
+import { getLocalizedPricingPlans } from "@/config/pricing";
 import { useOfferCountdown, resolveYearlyPrice, yearlyStandardPrice } from "@/hooks/use-offer-countdown";
 import { useMemo } from "react";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
+import type { Translations } from "@/lib/i18n/en";
 
 type BillingPeriod = 'monthly' | 'yearly';
 
@@ -18,76 +20,62 @@ interface PaywallStepProps {
 
 // Insights « professionnels » : on lit les réponses du questionnaire pro
 // (ids préfixés `p_`) pour résumer la maturité du pipeline du prospect.
-function generateProInsights(answers: QuestionnaireAnswers) {
-  const tracking = answers.p_tracking?.toString() || "";
-  const noSystem = tracking.includes("head") || tracking.includes("don't");
-  const hasCrm = tracking.includes("CRM");
+// Les réponses à choix multiples sont stockées comme l'INDEX de l'option
+// sélectionnée (voir Onboard.tsx) plutôt que son libellé traduit, pour que
+// cette logique reste valable quelle que soit la langue active.
+function generateProInsights(answers: QuestionnaireAnswers, t: Translations) {
+  const i = t.onboard.paywall.insights.pro;
+  const tracking = answers.p_tracking as number | undefined; // 0: head, 1: notes, 2: CRM, 3: don't track
+  const noSystem = tracking === 0 || tracking === 3;
+  const hasCrm = tracking === 2;
 
-  const gap = answers.p_gap?.toString() || "";
-  const goal = answers.p_goal?.toString() || "";
+  const gap = answers.p_gap as number | undefined; // 0: first message, 1: mid-conversation, 2: offer/price, 3: no follow-up
+  const goal = answers.p_goal as number | undefined; // 0: cold leads, 1: pipeline, 2: convert, 3: save time
 
   return {
-    pattern: noSystem
-      ? "Leads tracked by memory — high leak risk"
-      : hasCrm
-      ? "Structured pipeline, room to optimize"
-      : "Manual tracking, ready to scale",
+    pattern: noSystem ? i.patternNoSystem : hasCrm ? i.patternCrm : i.patternManual,
 
-    attachmentStyle: gap.includes("first message")
-      ? "Strong on volume, conversations stall early"
-      : gap.includes("offer") || gap.includes("price")
-      ? "Good at nurturing, loses leads at the close"
-      : gap.includes("follow-up")
-      ? "Strong on outreach, weak on follow-up"
-      : "Balanced seller, steady through the funnel",
+    attachmentStyle:
+      gap === 0 ? i.styleFirstMessage
+      : gap === 2 ? i.styleOfferPrice
+      : gap === 3 ? i.styleFollowUp
+      : i.styleBalanced,
 
-    primaryInsight: goal.includes("cold")
-      ? "Your priority is timing — catching warm leads before they slip away is exactly where signal tracking pays off."
-      : goal.includes("pipeline")
-      ? "You want visibility. Seeing every prospect and their temperature at a glance is the fastest win here."
-      : "Turning more conversations into clients starts with knowing who to message, and when — which is what we'll surface for you.",
+    primaryInsight:
+      goal === 0 ? i.insightCold
+      : goal === 1 ? i.insightPipeline
+      : i.insightDefault,
   };
 }
 
-function generatePersonalInsights(answers: QuestionnaireAnswers) {
+function generatePersonalInsights(answers: QuestionnaireAnswers, t: Translations) {
+  const i = t.onboard.paywall.insights.personal;
   // Chaque carte est pilotée par une question DISTINCTE pour éviter les
   // redondances : Pattern ← q2_pattern, Style ← q1, Insight ← q8.
-  const pattern = answers.q2_pattern?.toString() || "";
-  const style = answers.q1?.toString() || "";
-  const reaction = answers.q8?.toString() || "";
+  const pattern = answers.q2_pattern as number | undefined; // 0: new, 1: similar, 2: more often, 3: not sure
+  const style = answers.q1 as number | undefined; // 0: investment, 1: distance, 2: balanced, 3: anxiety
+  const reaction = answers.q8 as number | undefined; // 0: anger, 1: sadness, 2: confusion, 3: relief, 4: several
 
-  // Your Pattern — la disconnection est-elle récurrente ? (q2_pattern)
-  const patternInsight = pattern.includes("more often than")
-    ? "A recurring pattern in how your close bonds tend to end"
-    : pattern.includes("completely new")
-    ? "A first real experience of this kind of disconnection"
-    : pattern.includes("similar")
-    ? "You've felt this before — and this time you're paying attention"
-    : "An emerging awareness of how you connect with others";
+  const patternInsight =
+    pattern === 2 ? i.patternRecurring
+    : pattern === 0 ? i.patternNew
+    : pattern === 1 ? i.patternSimilar
+    : i.patternDefault;
 
-  // Relational Style — comment tu vis tes relations proches (q1)
-  const styleInsight = style.includes("a lot of investment")
-    ? "Deeply invested — you give a lot, sometimes more than you receive"
-    : style.includes("some distance")
-    ? "Self-protective — you open up slowly and on your own terms"
-    : style.includes("balanced")
-    ? "Balanced — you adapt to each person and each moment"
-    : style.includes("anxiety")
-    ? "Security-seeking — the fear of losing people stays close"
-    : "A nuanced, evolving way of relating to others";
+  const styleInsight =
+    style === 0 ? i.styleInvested
+    : style === 1 ? i.styleDistance
+    : style === 2 ? i.styleBalanced
+    : style === 3 ? i.styleAnxiety
+    : i.styleDefault;
 
-  // Key Insight — ta réaction émotionnelle face au signal (q8)
-  const primaryInsight = reaction.includes("Anger")
-    ? "There's a real sense of injustice here. Naming it matters — and it can also reveal the part of the story that's yours to learn from."
-    : reaction.includes("Sadness")
-    ? "The pain you feel reflects how much this mattered. Let yourself grieve while staying curious about what quietly shifted."
-    : reaction.includes("Confusion")
-    ? "Not knowing why is hard. The signals were likely there — just quieter than the unfollow itself."
-    : reaction.includes("Relief")
-    ? "Part of you saw it coming. That instinct is worth trusting in your next close relationship."
-    : reaction.includes("Several")
-    ? "You're holding several emotions at once — a sign you're processing this with real depth."
-    : "This change is worth reading slowly, for what it reveals about you — not just about the other person.";
+  const primaryInsight =
+    reaction === 0 ? i.insightAnger
+    : reaction === 1 ? i.insightSadness
+    : reaction === 2 ? i.insightConfusion
+    : reaction === 3 ? i.insightRelief
+    : reaction === 4 ? i.insightSeveral
+    : i.insightDefault;
 
   return {
     pattern: patternInsight,
@@ -96,26 +84,28 @@ function generatePersonalInsights(answers: QuestionnaireAnswers) {
   };
 }
 
-function generateInsights(answers: QuestionnaireAnswers, usageMode?: UsageMode | null) {
+function generateInsights(answers: QuestionnaireAnswers, t: Translations, usageMode?: UsageMode | null) {
   return usageMode === 'professional'
-    ? generateProInsights(answers)
-    : generatePersonalInsights(answers);
+    ? generateProInsights(answers, t)
+    : generatePersonalInsights(answers, t);
 }
 
 export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, billingPeriod, onBillingPeriodChange }: PaywallStepProps) {
-  const insights = generateInsights(answers, usageMode);
+  const { t } = useLanguage();
+  const insights = generateInsights(answers, t, usageMode);
   const isPro = usageMode === 'professional';
+  const localizedPlans = useMemo(() => getLocalizedPricingPlans(t), [t]);
 
   // Reorder plans based on usage mode - recommended plan first
   const orderedPlans = useMemo(() => {
     if (usageMode === 'professional') {
       // Pro first for professional users
-      return PRICING_PLANS.sort((a, b) => (a.id === 'pro' ? -1 : b.id === 'pro' ? 1 : 0));
+      return [...localizedPlans].sort((a, b) => (a.id === 'pro' ? -1 : b.id === 'pro' ? 1 : 0));
     } else {
       // Premium first for personal users
-      return PRICING_PLANS.sort((a, b) => (a.id === 'premium' ? -1 : b.id === 'premium' ? 1 : 0));
+      return [...localizedPlans].sort((a, b) => (a.id === 'premium' ? -1 : b.id === 'premium' ? 1 : 0));
     }
-  }, [usageMode]);
+  }, [usageMode, localizedPlans]);
 
   const recommendedPlan = usageMode === 'professional' ? 'pro' : 'premium';
 
@@ -150,15 +140,13 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
       >
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#02c950]/10 border border-[#02c950]/30 mb-4">
           <Sparkles className="w-4 h-4 text-[#02c950]" />
-          <span className="text-sm font-bold text-[#02c950]">Your reflection, summarized</span>
+          <span className="text-sm font-bold text-[#02c950]">{t.onboard.paywall.badge}</span>
         </div>
         <h2 className="text-3xl md:text-4xl font-display font-black text-white mb-3">
-          Here's what stood out from <span className="text-gradient">your answers</span>
+          {t.onboard.paywall.title} <span className="text-gradient">{t.onboard.paywall.titleHighlight}</span>
         </h2>
         <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-          {isPro
-            ? "A quick read on how you work today. Choose a plan to turn social signals into a pipeline and stop losing warm leads."
-            : "A quick summary based on what you shared. Choose a plan to keep tracking your relationships and continue your reflection over time."}
+          {isPro ? t.onboard.paywall.subtitlePro : t.onboard.paywall.subtitlePersonal}
         </p>
       </motion.div>
 
@@ -173,7 +161,7 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
           <div className="flex items-start gap-3">
             <div className="w-2 h-2 rounded-full bg-[#02c950] mt-2 shrink-0 shadow-[0_0_8px_rgba(2,201,80,0.7)]"></div>
             <div>
-              <h3 className="text-base font-bold text-white mb-1">{isPro ? 'Your Pipeline' : 'Your Pattern'}</h3>
+              <h3 className="text-base font-bold text-white mb-1">{isPro ? t.onboard.paywall.cardPipeline : t.onboard.paywall.cardPattern}</h3>
               <p className="text-gray-300 text-sm leading-relaxed">{insights.pattern}</p>
             </div>
           </div>
@@ -183,7 +171,7 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
           <div className="flex items-start gap-3">
             <div className="w-2 h-2 rounded-full bg-[#02c950] mt-2 shrink-0 shadow-[0_0_8px_rgba(2,201,80,0.7)]"></div>
             <div>
-              <h3 className="text-base font-bold text-white mb-1">{isPro ? 'Your Selling Style' : 'Relational Style'}</h3>
+              <h3 className="text-base font-bold text-white mb-1">{isPro ? t.onboard.paywall.cardSellingStyle : t.onboard.paywall.cardRelationalStyle}</h3>
               <p className="text-gray-300 text-sm leading-relaxed">{insights.attachmentStyle}</p>
             </div>
           </div>
@@ -193,7 +181,7 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
           <div className="flex items-start gap-3">
             <div className="w-2 h-2 rounded-full bg-[#02c950] mt-2 shrink-0 shadow-[0_0_8px_rgba(2,201,80,0.7)]"></div>
             <div>
-              <h3 className="text-base font-bold text-white mb-1">Key Insight</h3>
+              <h3 className="text-base font-bold text-white mb-1">{t.onboard.paywall.cardKeyInsight}</h3>
               <p className="text-gray-300 text-sm leading-relaxed">{insights.primaryInsight}</p>
             </div>
           </div>
@@ -207,7 +195,7 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
         transition={{ delay: 0.2 }}
       >
         <h3 className="text-2xl font-bold text-white text-center mb-6">
-          Choose your plan to start tracking your relationships
+          {t.onboard.paywall.choosePlan}
         </h3>
         
         {/* Billing Toggle */}
@@ -221,7 +209,7 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Monthly
+              {t.onboard.paywall.monthly}
             </button>
             <button
               onClick={() => onBillingPeriodChange('yearly')}
@@ -231,7 +219,7 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Yearly
+              {t.onboard.paywall.yearly}
               {offerActive && (
                 <span className="absolute -top-2 -right-2 bg-[#02c950] text-black text-xs font-bold px-2 py-0.5 rounded-full shadow-[0_0_12px_rgba(2,201,80,0.5)]">
                   -{yearlyDiscount}%
@@ -260,13 +248,13 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
                   {plan.id === recommendedPlan && (
                     <span className="px-3 py-1 rounded-full bg-[#02c950]/15 border border-[#02c950]/40 text-[#02c950] text-xs font-bold flex items-center gap-1.5">
                       <Star className="w-3.5 h-3.5" />
-                      Recommended
+                      {t.onboard.paywall.recommended}
                     </span>
                   )}
                   {selectedPlan === plan.id && (
                     <span className="px-3 py-1 rounded-full bg-[#02c950] text-black text-xs font-bold flex items-center gap-1.5 shadow-[0_0_18px_rgba(2,201,80,0.5)]">
                       <Check className="w-3.5 h-3.5" />
-                      Selected
+                      {t.onboard.paywall.selected}
                     </span>
                   )}
                 </div>
@@ -291,15 +279,15 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
                     <span className="text-2xl font-bold text-gray-500 line-through">{yearlyStandardPrice(planMonthly(plan.id)).toFixed(2)}€</span>
                   )}
                   <span className="text-5xl font-black text-white">{getPlanPrice(plan.id).toFixed(2)}€</span>
-                  <span className="text-gray-400">/{billingPeriod === 'monthly' ? 'month' : 'year'}</span>
+                  <span className="text-gray-400">{billingPeriod === 'monthly' ? t.onboard.paywall.perMonth : t.onboard.paywall.perYear}</span>
                 </div>
                 {billingPeriod === 'yearly' && offerActive && (
                   <p className="text-sm text-[#02c950] mt-1">
-                    Save {getYearlySavings(plan.id).toFixed(2)}€ compared to monthly
+                    {interpolate(t.onboard.paywall.saveVsMonthly, { amount: getYearlySavings(plan.id).toFixed(2) })}
                   </p>
                 )}
                 <p className="text-sm text-gray-400 mt-1">
-                  {plan.trialDays}-day free trial • Cancel anytime
+                  {interpolate(t.onboard.paywall.freeTrialCancel, { days: plan.trialDays })}
                 </p>
               </div>
 
@@ -323,7 +311,7 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
                   ? 'bg-[#02c950]/15 text-[#02c950] border border-[#02c950]/40'
                   : 'bg-white/5 text-white border border-white/10'
               }`}>
-                {selectedPlan === plan.id ? 'Selected' : plan.id === recommendedPlan ? 'Recommended' : 'Select Plan'}
+                {selectedPlan === plan.id ? t.onboard.paywall.selected : plan.id === recommendedPlan ? t.onboard.paywall.recommended : t.onboard.paywall.selectPlan}
               </div>
             </motion.div>
           ))}
@@ -336,7 +324,7 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
             className="mt-6 text-center"
           >
             <p className="text-gray-400 text-sm">
-              Click "Continue" below to proceed with your {selectedPlan === 'premium' ? 'Base' : 'Pro'} plan
+              {interpolate(t.onboard.paywall.continueHint, { plan: selectedPlan === 'premium' ? localizedPlans.find(p => p.id === 'premium')!.name : localizedPlans.find(p => p.id === 'pro')!.name })}
             </p>
           </motion.div>
         )}
@@ -351,15 +339,15 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
       >
         <div className="flex items-center gap-2">
           <Check className="w-4 h-4 text-[#02c950]" />
-          <span>7-14 day free trial</span>
+          <span>{t.onboard.paywall.trust.trial}</span>
         </div>
         <div className="flex items-center gap-2">
           <Check className="w-4 h-4 text-[#02c950]" />
-          <span>Cancel anytime</span>
+          <span>{t.onboard.paywall.trust.cancel}</span>
         </div>
         <div className="flex items-center gap-2">
           <Check className="w-4 h-4 text-[#02c950]" />
-          <span>Secure payment</span>
+          <span>{t.onboard.paywall.trust.payment}</span>
         </div>
       </motion.div>
     </div>
