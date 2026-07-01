@@ -134,7 +134,12 @@ app.use((req, res, next) => {
   // inexistante) et les scores ne sont jamais persistés. Idempotent.
   try {
     const walerDbPath = path.join(import.meta.dirname, "waler.db");
-    const initSqlPath = path.join(import.meta.dirname, "init_classification_tables.sql");
+    // NB: en production, index.ts est bundlé dans dist/index.cjs et
+    // import.meta.dirname pointe alors vers "dist/", pas "server/". On repasse
+    // par "../server/..." pour retomber sur le bon fichier dans les deux cas
+    // (en dev, import.meta.dirname finit déjà par "server", donc "../server"
+    // revient au même dossier).
+    const initSqlPath = path.join(import.meta.dirname, "..", "server", "init_classification_tables.sql");
     const initSql = fs.readFileSync(initSqlPath, "utf8");
     const sqlite = new Database(walerDbPath);
     sqlite.exec(initSql);
@@ -142,6 +147,23 @@ app.use((req, res, next) => {
     log("✅ Tables de classification vérifiées/créées (waler.db)");
   } catch (e) {
     console.error("⚠️ Init tables de classification échouée:", e);
+  }
+
+  // Init des tables des agents Pro (circle_members, liked_posts,
+  // timeline_events...) dans waler.db si absentes — sinon l'ajout d'un People
+  // échoue (INSERT sur table inexistante) avec des 500 en cascade sur
+  // /api/pro/analyze-person, /api/pro/circle-stats et /api/pro/people-suggestions.
+  // Idempotent (CREATE TABLE IF NOT EXISTS).
+  try {
+    const walerDbPath = path.join(import.meta.dirname, "waler.db");
+    const proTablesSqlPath = path.join(import.meta.dirname, "..", "migrations", "add_pro_agent_tables.sql");
+    const proTablesSql = fs.readFileSync(proTablesSqlPath, "utf8");
+    const sqlite = new Database(walerDbPath);
+    sqlite.exec(proTablesSql);
+    sqlite.close();
+    log("✅ Tables des agents Pro vérifiées/créées (waler.db)");
+  } catch (e) {
+    console.error("⚠️ Init tables des agents Pro échouée:", e);
   }
 
   await registerRoutes(httpServer, app, pgPool);
