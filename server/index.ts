@@ -137,6 +137,28 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Init du schéma de base (users, questionnaire_responses...) dans waler.db
+  // si absent. `waler.db` est gitignored (*.db) donc jamais livré tel quel en
+  // prod : sur un déploiement Railway sans ce bootstrap, better-sqlite3 crée
+  // silencieusement un fichier VIDE au premier accès, et toute requête sur
+  // `users` (résolution de compte Pro : resolveWalerUserId/ensureWalerUserId)
+  // échoue avec "no such table: users" — d'où les 500 en cascade sur
+  // /api/pro/circle-stats, /api/extension/people, etc. Doit tourner AVANT les
+  // deux migrations suivantes (elles référencent conceptuellement users.id).
+  // Idempotent (CREATE TABLE IF NOT EXISTS) — ne touche jamais aux données
+  // existantes si la base est déjà peuplée.
+  try {
+    const walerDbPath = path.join(moduleDir, "waler.db");
+    const baseSqlPath = path.join(moduleDir, "..", "server", "init_db.sql");
+    const baseSql = fs.readFileSync(baseSqlPath, "utf8");
+    const sqlite = new Database(walerDbPath);
+    sqlite.exec(baseSql);
+    sqlite.close();
+    log("✅ Schéma de base vérifié/créé (waler.db)");
+  } catch (e) {
+    console.error("⚠️ Init schéma de base échouée:", e);
+  }
+
   // Init des tables de classification (contact_scores, classification_*) dans
   // waler.db si absentes — sinon analyze-contact échoue (INSERT sur table
   // inexistante) et les scores ne sont jamais persistés. Idempotent.
