@@ -9,6 +9,14 @@ import { createServer } from "http";
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
+
+// esbuild ne polyfille PAS `import.meta.dirname` pour le format CJS (bundle de
+// prod) : la propriété reste `undefined`, ce qui casse tous les chemins vers
+// waler.db. `__dirname` existe nativement dans le bundle CJS de prod, et à
+// défaut (ESM, dev via tsx) on retombe sur `import.meta.url`.
+const moduleDir =
+  typeof __dirname !== "undefined" ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
 declare module "express-session" {
   interface SessionData {
@@ -133,13 +141,12 @@ app.use((req, res, next) => {
   // waler.db si absentes — sinon analyze-contact échoue (INSERT sur table
   // inexistante) et les scores ne sont jamais persistés. Idempotent.
   try {
-    const walerDbPath = path.join(import.meta.dirname, "waler.db");
-    // NB: en production, index.ts est bundlé dans dist/index.cjs et
-    // import.meta.dirname pointe alors vers "dist/", pas "server/". On repasse
-    // par "../server/..." pour retomber sur le bon fichier dans les deux cas
-    // (en dev, import.meta.dirname finit déjà par "server", donc "../server"
-    // revient au même dossier).
-    const initSqlPath = path.join(import.meta.dirname, "..", "server", "init_classification_tables.sql");
+    const walerDbPath = path.join(moduleDir, "waler.db");
+    // NB: en production, index.ts est bundlé dans dist/index.cjs et moduleDir
+    // pointe alors vers "dist/", pas "server/". On repasse par "../server/..."
+    // pour retomber sur le bon fichier dans les deux cas (en dev, moduleDir
+    // finit déjà par "server", donc "../server" revient au même dossier).
+    const initSqlPath = path.join(moduleDir, "..", "server", "init_classification_tables.sql");
     const initSql = fs.readFileSync(initSqlPath, "utf8");
     const sqlite = new Database(walerDbPath);
     sqlite.exec(initSql);
@@ -155,8 +162,8 @@ app.use((req, res, next) => {
   // /api/pro/analyze-person, /api/pro/circle-stats et /api/pro/people-suggestions.
   // Idempotent (CREATE TABLE IF NOT EXISTS).
   try {
-    const walerDbPath = path.join(import.meta.dirname, "waler.db");
-    const proTablesSqlPath = path.join(import.meta.dirname, "..", "migrations", "add_pro_agent_tables.sql");
+    const walerDbPath = path.join(moduleDir, "waler.db");
+    const proTablesSqlPath = path.join(moduleDir, "..", "migrations", "add_pro_agent_tables.sql");
     const proTablesSql = fs.readFileSync(proTablesSqlPath, "utf8");
     const sqlite = new Database(walerDbPath);
     sqlite.exec(proTablesSql);
