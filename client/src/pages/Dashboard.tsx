@@ -569,6 +569,7 @@ export default function Dashboard() {
           <div className={!isPro ? 'filter blur-sm pointer-events-none' : ''}>
             {/* Navbar */}
             <NavBar
+              pinLogo
               center={
                 <div className="flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 rounded-full p-1">
                   <button
@@ -704,6 +705,7 @@ export default function Dashboard() {
 
       {/* Navbar */}
       <NavBar
+        pinLogo
         center={
           <div className="flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 rounded-full p-1">
             <button
