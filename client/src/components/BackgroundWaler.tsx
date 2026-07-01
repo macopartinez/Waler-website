@@ -32,7 +32,11 @@ export function BackgroundWaler() {
       return 180;
     };
 
-    const tick = () => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const FRAME_INTERVAL = 1000 / 30; // cap to ~30 FPS to keep the main thread free
+    let lastDraw = 0;
+
+    const drawFrame = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
 
@@ -82,12 +86,22 @@ export function BackgroundWaler() {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.015)';
       ctx.lineWidth = 0.5;
       ctx.strokeText(text, textX, textY);
+    };
 
+    const tick = (currentTime: number) => {
       rafRef.current = requestAnimationFrame(tick);
+      if (currentTime - lastDraw < FRAME_INTERVAL) return;
+      lastDraw = currentTime;
+      drawFrame();
     };
 
     document.fonts?.ready.then(() => {
-      rafRef.current = requestAnimationFrame(tick);
+      if (prefersReducedMotion) {
+        // One static frame of the faint WALER wordmark, no animation loop.
+        drawFrame();
+      } else {
+        rafRef.current = requestAnimationFrame(tick);
+      }
     });
 
     const handleResize = () => {

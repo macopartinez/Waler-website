@@ -206,13 +206,10 @@ export default function Landing() {
       />
       <section className="h-screen snap-start snap-always flex items-center justify-center relative px-6" data-testid="section-hero">
         <div className="max-w-5xl mx-auto text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.5 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="text-paper"
-          >
+          {/* Hero renders visible immediately (no opacity:0 entrance): it's the
+              LCP element and above the fold, so animating it in would delay LCP
+              and flicker against the static hero painted from index.html. */}
+          <div className="text-paper">
             <h1 className="text-6xl md:text-8xl font-display font-black leading-[1] mb-8 text-white tracking-tighter">
               The first relationship <br />
               clarity tool for{" "}
@@ -234,7 +231,7 @@ export default function Landing() {
             <p className="text-xl md:text-2xl text-gray-400 mb-12 max-w-3xl mx-auto leading-relaxed font-medium">
               Waler detects when someone close leaves your digital circle — and guides you through what it really means about you and your relationship.
             </p>
-          </motion.div>
+          </div>
         </div>
       </section>
       <section className="h-screen snap-start snap-always flex items-center justify-center relative px-6" data-testid="section-how-it-works">

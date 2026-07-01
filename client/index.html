@@ -13,6 +13,38 @@
       <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Doppio+One&family=Lalezar&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
     </noscript>
+    <!-- Critical CSS for the static hero below: it paints the LCP element
+         immediately (system font, no JS) before the ~480 KB React bundle loads.
+         React's createRoot().render() replaces #root's contents on mount, so the
+         static hero is swapped out for the real interactive one seamlessly. -->
+    <style>
+      html, body { margin: 0; background: #0a0a0a; }
+      #hero-static {
+        position: fixed; inset: 0; z-index: 1;
+        display: flex; align-items: center; justify-content: center;
+        padding: 0 1.5rem; text-align: center;
+        font-family: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      #hero-static .wrap { max-width: 64rem; }
+      #hero-static h1 {
+        margin: 0 0 2rem; color: #fff; font-weight: 900;
+        line-height: 1; letter-spacing: -0.05em; font-size: 3.75rem;
+      }
+      #hero-static .grad {
+        color: #fff;
+        filter: drop-shadow(0 0 8px rgba(255,255,255,1))
+                drop-shadow(0 0 16px rgba(2,201,80,.8))
+                drop-shadow(0 0 32px rgba(2,201,80,.6));
+      }
+      #hero-static p {
+        margin: 0 auto; max-width: 48rem; color: #9ca3af;
+        font-weight: 500; font-size: 1.25rem; line-height: 1.6;
+      }
+      @media (min-width: 768px) {
+        #hero-static h1 { font-size: 6rem; }
+        #hero-static p { font-size: 1.5rem; }
+      }
+    </style>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-6Q7CE0BBRV"></script>
     <script>
@@ -30,7 +62,16 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static LCP hero — mirrors the Landing.tsx hero so it paints instantly,
+           then React replaces it on mount. Keep the copy in sync. -->
+      <div id="hero-static" aria-hidden="true">
+        <div class="wrap">
+          <h1>The first relationship<br>clarity tool for <span class="grad">personal.</span></h1>
+          <p>Waler detects when someone close leaves your digital circle — and guides you through what it really means about you and your relationship.</p>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

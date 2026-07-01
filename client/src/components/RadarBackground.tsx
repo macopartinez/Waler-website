@@ -20,6 +20,19 @@ export function RadarBackground() {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
+    // Honor reduced-motion: paint one static dark frame and skip the rAF loop
+    // entirely (no per-frame main-thread work → better INP for these users).
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return () => window.removeEventListener('resize', resizeCanvas);
+    }
+
+    // Cap to ~30 FPS: the ambient waves are slow, so halving the redraw rate
+    // frees the main thread for interaction handlers without a visible change.
+    const FRAME_INTERVAL = 1000 / 30;
+
     const centerX = 10;
     const centerY = 10;
     const waves: WaveObj[] = [];
@@ -85,7 +98,9 @@ export function RadarBackground() {
     };
 
     const animate = (currentTime: number) => {
+      animationId = requestAnimationFrame(animate);
       const deltaTime = currentTime - lastFrameTime;
+      if (deltaTime < FRAME_INTERVAL) return;
       lastFrameTime = currentTime;
       const safeDeltaTime = Math.min(deltaTime, 100);
       ctx.fillStyle = '#0a0a0a';
@@ -109,7 +124,6 @@ export function RadarBackground() {
       ctx.fillStyle = 'rgba(200, 255, 200, 0)';
       ctx.fill();
       ctx.restore();
-      animationId = requestAnimationFrame(animate);
     };
 
     const startAnimation = () => {
@@ -140,7 +154,6 @@ export function RadarBackground() {
     <canvas
       ref={canvasRef}
       className="fixed inset-0 w-full h-full z-0 pointer-events-none"
-      style={{ willChange: 'contents' }}
     />
   );
 }

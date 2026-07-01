@@ -24,7 +24,7 @@ export function NavBar({ logoSize = 32, center, actions }: NavBarProps) {
 
   return (
     <nav className="fixed w-full top-0 z-50 bg-transparent">
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-2">
+      <div className="relative w-full px-4 sm:px-6 h-20 flex items-center justify-between gap-2">
         <button
           onClick={() => navigate("/")}
           className="shrink-0"
