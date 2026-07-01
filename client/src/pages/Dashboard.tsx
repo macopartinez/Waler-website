@@ -24,6 +24,7 @@ import { SettingsModal } from "@/components/SettingsModal";
 import { UserMenu } from "@/components/UserMenu";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { useAccounts } from "@/hooks/use-accounts";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 
 type Section = "followers" | "unfollowers" | "blockers";
 type Period = "month" | "year";
@@ -303,6 +304,12 @@ function SectionArcNav({ activeSection, onSelect }: SectionArcNavProps) {
 }
 
 export default function Dashboard() {
+  const { t } = useLanguage();
+  const sectionLabels: Record<Section, string> = {
+    followers: t.dashboard.sections.followers,
+    unfollowers: t.dashboard.sections.unfollowers,
+    blockers: t.dashboard.sections.blockers,
+  };
   const [, params] = useRoute("/dashboard/:userId");
   const [, navigate] = useLocation();
   const { user: authUser, isLoading: authLoading, logout } = useAuth();
@@ -537,7 +544,7 @@ export default function Dashboard() {
   if (userLoading || statsLoading) return <DashboardLoading />;
   
   // Show error state
-  if (!user || !stats) return <div className="text-white p-8">Error loading dashboard</div>;
+  if (!user || !stats) return <div className="text-white p-8">{t.dashboard.errorLoading}</div>;
   
   // Get user registration date (fallback to 1 year ago if not available)
   const userRegistrationDate = 'createdAt' in user && user.createdAt 
@@ -580,7 +587,7 @@ export default function Dashboard() {
                     }`}
                   >
                     <User className="w-4 h-4" />
-                    <span className="hidden sm:inline">Personal</span>
+                    <span className="hidden sm:inline">{t.dashboard.personal}</span>
                   </button>
                   <button
                     onClick={() => setMode('professional')}
@@ -591,7 +598,7 @@ export default function Dashboard() {
                     }`}
                   >
                     <Briefcase className="w-4 h-4" />
-                    <span className="hidden sm:inline">Professional</span>
+                    <span className="hidden sm:inline">{t.dashboard.professional}</span>
                     {!isPro && <Crown className="w-3 h-3 text-amber-400" />}
                   </button>
                 </div>
@@ -603,7 +610,7 @@ export default function Dashboard() {
                     onClick={() => logout()}
                     className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-sm font-bold text-gray-400 hover:text-white transition-colors border border-white/10 hover:border-white/20"
                   >
-                    <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Logout</span>
+                    <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">{t.dashboard.logout}</span>
                   </button>
                   <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-[#02c950]/15 border border-[#02c950]/30 text-[#02c950]">
                     <Crown className="w-4 h-4" />
@@ -715,7 +722,7 @@ export default function Dashboard() {
               }`}
             >
               <User className="w-4 h-4" />
-              <span className="hidden sm:inline">Personal</span>
+              <span className="hidden sm:inline">{t.dashboard.personal}</span>
             </button>
             <button
               onClick={() => setMode('professional')}
@@ -726,7 +733,7 @@ export default function Dashboard() {
               }`}
             >
               <Briefcase className="w-4 h-4" />
-              <span className="hidden sm:inline">Professional</span>
+              <span className="hidden sm:inline">{t.dashboard.professional}</span>
               {!isPro && <Crown className="w-3 h-3 text-amber-400" />}
             </button>
           </div>
@@ -738,7 +745,7 @@ export default function Dashboard() {
               onClick={() => logout()}
               className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-sm font-bold text-gray-400 hover:text-white transition-colors border border-white/10 hover:border-white/20"
             >
-              <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Logout</span>
+              <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">{t.dashboard.logout}</span>
             </button>
             {tier && (
               <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-[#02c950]/15 border border-[#02c950]/30 text-[#02c950]">
@@ -851,7 +858,7 @@ export default function Dashboard() {
                   zIndex: 80,
                 }}
               >
-                Your community grew by {growthDisplay}
+                {interpolate(t.dashboard.communityGrew, { growth: growthDisplay })}
               </div>
             )}
 
@@ -872,7 +879,7 @@ export default function Dashboard() {
                 boxShadow: "inset 0 0 60px rgba(255,255,255,0.04), 0 8px 32px rgba(0,0,0,0.4)",
               }}
             >
-              <div className="font-doppio text-white uppercase leading-none text-center" style={{ fontSize: "30px" }}>TOTAL</div>
+              <div className="font-doppio text-white uppercase leading-none text-center" style={{ fontSize: "30px" }}>{t.dashboard.total}</div>
               <div className="font-doppio text-white leading-none text-center" style={{ fontSize: "112px", lineHeight: 1 }}>{totalCount}</div>
               {delta !== 0 && (
                 <div className="flex items-center justify-center gap-2 mt-2">
@@ -886,7 +893,7 @@ export default function Dashboard() {
                 </div>
               )}
               <div className={`font-doppio mt-1 text-center ${SECTION_CONFIG[activeSection].textColor}`} style={{ fontSize: "30px", lineHeight: 1 }}>
-                {SECTION_CONFIG[activeSection].label}
+                {sectionLabels[activeSection]}
               </div>
               </div>
             </div>
@@ -903,7 +910,7 @@ export default function Dashboard() {
             className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/10 border border-white/20 text-sm font-bold hover:bg-white/15 transition-all relative"
             style={{ marginTop: "-72px", zIndex: 50 }}
           >
-            <List className="w-4 h-4" /> Your Circle
+            <List className="w-4 h-4" /> {t.dashboard.yourCircle}
           </button>
         </motion.div>
 
@@ -972,7 +979,7 @@ export default function Dashboard() {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: "rgba(255,255,255,0.8)", fontSize: 10 }}
-                  label={{ value: period === "year" ? "MONTH" : "DAY", position: "insideBottomRight", offset: -5, fill: "rgba(255,255,255,0.65)", fontSize: 10 }}
+                  label={{ value: period === "year" ? t.dashboard.axis.month : t.dashboard.axis.day, position: "insideBottomRight", offset: -5, fill: "rgba(255,255,255,0.65)", fontSize: 10 }}
                 />
                 <YAxis
                   axisLine={false}
@@ -980,7 +987,7 @@ export default function Dashboard() {
                   tick={{ fill: "rgba(255,255,255,0.8)", fontSize: 10 }}
                   allowDecimals={false}
                   label={{
-                    value: activeSection === "followers" ? "FOLLOWERS" : activeSection === "unfollowers" ? "UNFOLLOWERS" : "BLOCKERS",
+                    value: activeSection === "followers" ? t.dashboard.axis.followers : activeSection === "unfollowers" ? t.dashboard.axis.unfollowers : t.dashboard.axis.blockers,
                     angle: -90,
                     position: "insideLeft",
                     fill: "rgba(255,255,255,0.65)",
@@ -1000,19 +1007,19 @@ export default function Dashboard() {
                       .slice(0, currentIndex + 1)
                       .reduce((sum, d) => sum + (d[sectionKey] || 0), 0);
                     
-                    const label = activeSection === "followers" ? "Followers" : activeSection === "unfollowers" ? "Unfollowers" : "Blockers";
+                    const label = sectionLabels[activeSection];
                     const sign = currentDayValue > 0 ? "+" : "";
                     const textColor = activeSection === "followers" ? "text-[#02c950]" : activeSection === "unfollowers" ? "text-amber-500" : "text-gray-300";
                     
                     return [
                       <div key="tooltip-content" className="flex flex-col gap-1">
                         <div className={`font-bold ${textColor}`}>{sign}{currentDayValue} {label.toLowerCase()}</div>
-                        <div className="text-xs text-gray-400">Total: {cumulativeTotal}</div>
+                        <div className="text-xs text-gray-400">{interpolate(t.dashboard.tooltip.total, { total: cumulativeTotal })}</div>
                       </div>,
                       ""
                     ];
                   }}
-                  labelFormatter={(label) => period === "year" ? label : `Day ${label}`}
+                  labelFormatter={(label) => period === "year" ? label : interpolate(t.dashboard.tooltip.dayPrefix, { day: label })}
                 />
                 <Bar 
                   dataKey={activeSection === "followers" ? "followers" : activeSection === "unfollowers" ? "unfollowers" : "blockers"} 
@@ -1049,11 +1056,11 @@ export default function Dashboard() {
               >
                 <div className="pt-3">
                   <div className="text-xs font-bold text-gray-400 mb-2">
-                    {activeSection === "followers" ? "Followers" : activeSection === "unfollowers" ? "Unfollowers" : "Blockers"} {period === "year" ? `in ${MONTHS[clickedDay - 1]}` : `on day ${clickedDay}`}
+                    {sectionLabels[activeSection]} {period === "year" ? interpolate(t.dashboard.dayDetail.inMonth, { month: MONTHS[clickedDay - 1] }) : interpolate(t.dashboard.dayDetail.onDay, { day: clickedDay })}
                   </div>
                   {dayAccounts.length === 0 ? (
                     <div className="text-xs text-gray-500">
-                      No {activeSection === "followers" ? "followers" : activeSection === "unfollowers" ? "unfollowers" : "blockers"} {period === "year" ? "this month" : "this day"}
+                      {interpolate(t.dashboard.dayDetail.noItems, { section: sectionLabels[activeSection].toLowerCase(), period: period === "year" ? t.dashboard.dayDetail.thisMonth : t.dashboard.dayDetail.thisDay })}
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
@@ -1083,7 +1090,7 @@ export default function Dashboard() {
                       })}
                       {activeSection === 'followers' && dayAccounts.length > 5 && (
                         <div className="flex items-center gap-2 bg-white/5 rounded-full px-3 py-1 text-xs font-medium text-gray-400">
-                          + {dayAccounts.length - 5} followers
+                          {interpolate(t.dashboard.dayDetail.moreFollowers, { count: dayAccounts.length - 5 })}
                         </div>
                       )}
                     </div>
@@ -1114,7 +1121,7 @@ export default function Dashboard() {
             >
               <div className="flex items-center justify-between p-6 border-b border-white/10">
                 <h2 className="text-lg font-black">
-                  {SECTION_CONFIG[activeSection].label}
+                  {sectionLabels[activeSection]}
                 </h2>
                 <button onClick={() => setShowAccountsList(false)} className="text-gray-400 hover:text-white">
                   <X className="w-5 h-5" />
@@ -1122,7 +1129,7 @@ export default function Dashboard() {
               </div>
               <div className="overflow-y-auto flex-1 p-4 space-y-3">
                 {sectionAccounts.length === 0 ? (
-                  <div className="text-center text-gray-500 py-10">No accounts found</div>
+                  <div className="text-center text-gray-500 py-10">{t.dashboard.modal.noAccountsFound}</div>
                 ) : (
                   sectionAccounts.map((acc: any) => {
                     // Les followers sont toujours débloqués, seuls les unfollowers et blockers peuvent être verrouillés
@@ -1160,21 +1167,21 @@ export default function Dashboard() {
                                 <Lock className="w-4 h-4 text-gray-500" />
                               </div>
                               <div className="text-xs text-gray-500">
-                                Click to reveal
+                                {t.dashboard.modal.clickToReveal}
                               </div>
                             </>
                           )}
                         </div>
                         {isUnlocked && (acc.recoveredAt || acc.recovered_at) && (
                           <div className="text-xs px-2 py-1 rounded-full bg-[#02c950]/15 text-[#02c950] border border-[#02c950]/30 flex items-center gap-1">
-                            <RotateCcw className="w-3 h-3" /> Refollowed
+                            <RotateCcw className="w-3 h-3" /> {t.dashboard.modal.refollowed}
                           </div>
                         )}
                         {isUnlocked && activeSection === 'blockers' && acc.status && (
                           <div className="text-xs px-2 py-1 rounded-full bg-white/10 flex items-center gap-1">
                             {acc.status === 'blocked'
-                              ? <><Ban className="w-3 h-3" /> Blocked</>
-                              : <><UserX className="w-3 h-3" /> Removed</>}
+                              ? <><Ban className="w-3 h-3" /> {t.dashboard.modal.blocked}</>
+                              : <><UserX className="w-3 h-3" /> {t.dashboard.modal.removed}</>}
                           </div>
                         )}
                       </div>
@@ -1225,7 +1232,7 @@ export default function Dashboard() {
               onClick={(e) => e.stopPropagation()}
               className="bg-[#0f0f0f] border border-white/10 rounded-3xl p-6 w-full max-w-md"
             >
-              <h3 className="text-xl font-bold text-white mb-4">Select Month</h3>
+              <h3 className="text-xl font-bold text-white mb-4">{t.dashboard.pickers.selectMonth}</h3>
               <div className="grid grid-cols-3 gap-3">
                 {MONTHS.map((month, index) => {
                   const currentYear = new Date().getFullYear();
@@ -1279,7 +1286,7 @@ export default function Dashboard() {
               onClick={(e) => e.stopPropagation()}
               className="bg-[#0f0f0f] border border-white/10 rounded-3xl p-6 w-full max-w-md"
             >
-              <h3 className="text-xl font-bold text-white mb-4">Select Year</h3>
+              <h3 className="text-xl font-bold text-white mb-4">{t.dashboard.pickers.selectYear}</h3>
               <div className="grid grid-cols-4 gap-3 max-h-96 overflow-y-auto">
                 {Array.from(
                   { length: new Date().getFullYear() - registrationYear + 1 }, 

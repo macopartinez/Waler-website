@@ -4,8 +4,16 @@ import { dirname } from 'path';
 
 const ICON_SIZES = [16, 32, 48, 128];
 
+// URL du backend injectée dans TOUS les bundles à la compilation (remplace
+// `__WALER_API_BASE__` dans src/config.ts). Défaut = localhost (dev) ; le packaging
+// store (package-extension.js) exporte WALER_API_BASE=https://waler.website avant
+// d'appeler `npm run build`, garantissant que le ZIP ne contient jamais localhost.
+const WALER_API_BASE = process.env.WALER_API_BASE || 'http://localhost:5000';
+const DEFINE = { __WALER_API_BASE__: JSON.stringify(WALER_API_BASE) };
+
 async function build() {
-  console.log('🔨 Building Waler Extension...\n');
+  console.log('🔨 Building Waler Extension...');
+  console.log(`🔧 API base injectée : ${WALER_API_BASE}\n`);
 
   // Build service worker
   console.log('📦 Building service worker...');
@@ -16,6 +24,7 @@ async function build() {
     format: 'esm',
     platform: 'browser',
     target: 'es2020',
+    define: DEFINE,
   });
   console.log('✓ Service worker built\n');
 
@@ -28,6 +37,7 @@ async function build() {
     format: 'iife',
     platform: 'browser',
     target: 'es2020',
+    define: DEFINE,
   });
   console.log('✓ Instagram tracker built\n');
 
@@ -39,6 +49,7 @@ async function build() {
     format: 'iife',
     platform: 'browser',
     target: 'es2020',
+    define: DEFINE,
   });
   console.log('✓ Auth listener built\n');
 
@@ -51,6 +62,7 @@ async function build() {
     format: 'iife',
     platform: 'browser',
     target: 'es2020',
+    define: DEFINE,
   });
   console.log('✓ Page interceptor built\n');
 
@@ -63,6 +75,7 @@ async function build() {
     format: 'esm',
     platform: 'browser',
     target: 'es2020',
+    define: DEFINE,
   });
   console.log('✓ Popup script built\n');
 

@@ -1,10 +1,16 @@
 import { motion } from "framer-motion";
 import { Building2, Server, Mail, Globe, Shield } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 export default function LegalNotice() {
+  const { t } = useLanguage();
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-950 text-white">
       <div className="max-w-4xl mx-auto px-6 py-20">
+        <div className="flex justify-end mb-8">
+          <LanguageSwitcher />
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
@@ -15,10 +21,10 @@ export default function LegalNotice() {
               <Building2 className="w-10 h-10 text-green-400" />
             </div>
             <h1 className="text-5xl md:text-6xl font-display font-black mb-6 text-white tracking-tighter">
-              Legal <span className="text-gradient">Notice</span>
+              {t.legalNoticePage.title1} <span className="text-gradient">{t.legalNoticePage.title2}</span>
             </h1>
             <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              Who runs Waler and how to reach us.
+              {t.legalNoticePage.subtitle}
             </p>
           </div>
 
@@ -34,9 +40,9 @@ export default function LegalNotice() {
                   <Building2 className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Publisher</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.legalNoticePage.publisher.title}</h2>
                   <p className="text-gray-300 leading-relaxed">
-                    This website is published by <strong className="text-white">Waler Analytics</strong>. Waler is an independent service for tracking and analyzing Instagram relationships. For any legal or business inquiry, please use the contact details below.
+                    {t.legalNoticePage.publisher.p1Before} <strong className="text-white">{t.legalNoticePage.publisher.companyName}</strong>{t.legalNoticePage.publisher.p1After}
                   </p>
                 </div>
               </div>
@@ -53,14 +59,14 @@ export default function LegalNotice() {
                   <Mail className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Contact</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.legalNoticePage.contact.title}</h2>
                   <p className="text-gray-300 leading-relaxed">
-                    Email:{' '}
+                    {t.legalNoticePage.contact.emailLabel}{' '}
                     <a href="mailto:walerwebsite@outlook.com" className="text-green-400 hover:text-green-300 transition-colors">
                       walerwebsite@outlook.com
                     </a>
                     <br />
-                    Instagram:{' '}
+                    {t.legalNoticePage.contact.instagramLabel}{' '}
                     <a href="https://instagram.com/waler.web" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300 transition-colors">
                       @waler.web
                     </a>
@@ -80,10 +86,10 @@ export default function LegalNotice() {
                   <Server className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Hosting & Data Storage</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.legalNoticePage.hosting.title}</h2>
                   <p className="text-gray-300 leading-relaxed">
-                    User data is stored on our own <strong className="text-green-400">private, secure servers</strong>. It is never shared with or sold to third parties. Payment processing is handled by Stripe, and infrastructure is operated using industry-standard secure providers. See our{' '}
-                    <a href="/privacy" className="text-green-400 hover:text-green-300 transition-colors">Privacy Policy</a> for full details.
+                    {t.legalNoticePage.hosting.p1Before} <strong className="text-green-400">{t.legalNoticePage.hosting.bold}</strong>{t.legalNoticePage.hosting.p1After}{' '}
+                    <a href="/privacy" className="text-green-400 hover:text-green-300 transition-colors">{t.legalNoticePage.hosting.linkText}</a> {t.legalNoticePage.hosting.p1End}
                   </p>
                 </div>
               </div>
@@ -100,9 +106,9 @@ export default function LegalNotice() {
                   <Globe className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Intellectual Property</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.legalNoticePage.ip.title}</h2>
                   <p className="text-gray-300 leading-relaxed">
-                    All content on this site — branding, design, text and code — is the property of Waler Analytics unless otherwise stated, and may not be reproduced without permission. Instagram is a trademark of Meta Platforms, Inc.; Waler is an independent product and is not affiliated with or endorsed by Meta.
+                    {t.legalNoticePage.ip.p1}
                   </p>
                 </div>
               </div>
@@ -119,9 +125,9 @@ export default function LegalNotice() {
                   <Shield className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Our Commitment</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.legalNoticePage.commitment.title}</h2>
                   <p className="text-gray-300 leading-relaxed">
-                    <strong className="text-green-400">Your data stays private.</strong> It is never shared, traded or sold, and is kept on private servers used solely to operate Waler.
+                    <strong className="text-green-400">{t.legalNoticePage.commitment.bold}</strong> {t.legalNoticePage.commitment.p2}
                   </p>
                 </div>
               </div>
@@ -133,7 +139,7 @@ export default function LegalNotice() {
               transition={{ delay: 0.7 }}
               className="text-center text-sm text-gray-500 pt-8"
             >
-              Last updated: June 2026
+              {t.legalNoticePage.lastUpdated}
             </motion.div>
           </div>
         </motion.div>

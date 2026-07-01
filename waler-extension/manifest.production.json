@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Waler - Instagram Analytics",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Track your Instagram followers, unfollowers, and engagement in real-time",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqIYgkkUj5fHfpCCBy27AECOn7+2j6xcySKFmIE+kvFSQrliEjA8g5mj5tTgLFaB98O5Yob7MaEaVFRH/gW0Uolup5uaa0ou79JpDPw5zo4SlIQ6s5Wkxxmr2zaS/lMf0RRlEH3zRJRFzdNgk09rjtRQXsHnGrhqx+Ng+4bpPjb6oOpcEG5dkuu1GQAsThUycVAJbLF7N+Qatv2/yOK5xIEZlOCyoVLkjTCZPA7RBCOR4YN8397+JW03xvpELRV1ca1I+LX1MNTAmihAJYxPGbLX9gjf80vEZPOEzHePGMnT6568JggW7qxPOChofPjvByFlxmVt+r9yJjt6t5ZVVlwIDAQAB",
   "permissions": [
@@ -15,8 +15,7 @@
     "https://www.instagram.com/*",
     "https://instagram.com/*",
     "https://i.instagram.com/*",
-    "https://waler.website/*",
-    "http://localhost:5000/*"
+    "https://waler.website/*"
   ],
   "background": {
     "service_worker": "dist/background/service-worker.js",
@@ -25,11 +24,17 @@
   "content_scripts": [
     {
       "matches": ["https://www.instagram.com/*", "https://instagram.com/*"],
+      "js": ["dist/injected/page-interceptor.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.instagram.com/*", "https://instagram.com/*"],
       "js": ["dist/content/instagram-tracker.js"],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://waler.website/*", "http://localhost:5000/*"],
+      "matches": ["https://waler.website/*"],
       "js": ["dist/content/auth-listener.js"],
       "run_at": "document_idle"
     }
@@ -41,7 +46,7 @@
     "128": "assets/icons/icon-128.png"
   },
   "action": {
-    "default_popup": "src/popup/index.html",
+    "default_popup": "dist/popup/index.html",
     "default_icon": {
       "16": "assets/icons/icon-16.png",
       "32": "assets/icons/icon-32.png",
@@ -51,11 +56,11 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["injected/page-script.js"],
+      "resources": ["dist/injected/page-interceptor.js"],
       "matches": ["https://www.instagram.com/*", "https://instagram.com/*"]
     }
   ],
   "externally_connectable": {
-    "matches": ["https://waler.website/*", "http://localhost:5000/*"]
+    "matches": ["https://waler.website/*"]
   }
 }

@@ -9,11 +9,14 @@ import { GlassText } from "@/components/GlassText";
 import { motion } from "framer-motion";
 import { Copy, Check, Instagram, Loader2, ArrowRight, RefreshCw, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Verification() {
   const [, navigate] = useLocation();
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const { t } = useLanguage();
   
   const [verificationCode, setVerificationCode] = useState("");
   const [username, setUsername] = useState("");
@@ -70,8 +73,8 @@ export default function Verification() {
     navigator.clipboard.writeText(verificationCode);
     setCopied(true);
     toast({
-      title: "Code copied!",
-      description: "Collez-le dans votre message Instagram",
+      title: t.verification.toastCopiedTitle,
+      description: t.verification.toastCopiedDesc,
     });
     setTimeout(() => setCopied(false), 2000);
   };
@@ -126,8 +129,9 @@ export default function Verification() {
 
       {/* Navbar */}
       <nav className="fixed w-full top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <GlassText text="WALER" fontSize={32} />
+          <LanguageSwitcher />
         </div>
       </nav>
 
@@ -145,9 +149,9 @@ export default function Verification() {
                   <div className="w-16 h-16 rounded-full bg-[#02c950]/20 flex items-center justify-center mx-auto mb-4">
                     <PlatformIcon className="w-8 h-8 text-[#02c950]" />
                   </div>
-                  <h1 className="text-3xl font-bold mb-2">Verify your account</h1>
+                  <h1 className="text-3xl font-bold mb-2">{t.verification.title}</h1>
                   <p className="text-gray-400">
-                    Send this code to <span className="text-[#02c950]">@waler_official</span> from your account{" "}
+                    {t.verification.sendCodeTo} <span className="text-[#02c950]">@waler_official</span> {t.verification.fromAccount}{" "}
                     <span className="font-bold text-white">@{username}</span>
                   </p>
                 </div>
@@ -156,7 +160,7 @@ export default function Verification() {
                 <div className="mb-6">
                   <div className="relative">
                     <div className="bg-white/10 rounded-xl p-4 border border-white/20 font-mono text-center text-lg">
-                      {verificationCode || "Loading..."}
+                      {verificationCode || t.verification.loading}
                     </div>
                     <button
                       onClick={handleCopy}
@@ -176,8 +180,8 @@ export default function Verification() {
                   <div className="flex items-start gap-2 text-sm text-green-200">
                     <AlertTriangle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
                     <p>
-                      <strong>Important:</strong> You must send this message from{" "}
-                      <strong>@{username}</strong>, otherwise verification will fail for security reasons.
+                      <strong>{t.verification.important}</strong> {t.verification.mustSendFrom}{" "}
+                      <strong>@{username}</strong>{t.verification.otherwiseFail}
                     </p>
                   </div>
                 </div>
@@ -186,7 +190,7 @@ export default function Verification() {
                 {timeLeft > 0 && (
                   <div className="text-center mb-6">
                     <p className="text-sm text-gray-400">
-                      Code expires in:{" "}
+                      {t.verification.codeExpiresIn}{" "}
                       <span className="font-mono text-[#02c950] font-bold">{formatTime(timeLeft)}</span>
                     </p>
                   </div>
@@ -201,14 +205,14 @@ export default function Verification() {
                     className="w-full h-12 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold rounded-xl flex items-center justify-center"
                   >
                     <Instagram className="w-5 h-5 mr-2" />
-                    Open Instagram
+                    {t.verification.openInstagram}
                   </a>
 
                   <Button
                     onClick={() => setStep("verify")}
                     className="w-full h-12 bg-[#02c950] hover:bg-[#02c950]/90 text-black font-bold rounded-xl"
                   >
-                    I've sent the message
+                    {t.verification.sentMessage}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                 </div>
@@ -219,9 +223,9 @@ export default function Verification() {
                   <div className="w-16 h-16 rounded-full bg-[#02c950]/20 flex items-center justify-center mx-auto mb-4">
                     <Check className="w-8 h-8 text-[#02c950]" />
                   </div>
-                  <h1 className="text-3xl font-bold mb-2">Enter the code you received</h1>
+                  <h1 className="text-3xl font-bold mb-2">{t.verification.enterCode}</h1>
                   <p className="text-gray-400">
-                    Waler replied with a 6-digit code
+                    {t.verification.repliedWithCode}
                   </p>
                 </div>
 
@@ -249,10 +253,10 @@ export default function Verification() {
                     {isVerifying ? (
                       <>
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Verifying...
+                        {t.verification.verifying}
                       </>
                     ) : (
-                      "Verify"
+                      t.verification.verify
                     )}
                   </Button>
 
@@ -265,12 +269,12 @@ export default function Verification() {
                     {isResending ? (
                       <>
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Sending...
+                        {t.verification.sending}
                       </>
                     ) : (
                       <>
                         <RefreshCw className="w-5 h-5 mr-2" />
-                        Resend a new code
+                        {t.verification.resend}
                       </>
                     )}
                   </Button>
@@ -280,7 +284,7 @@ export default function Verification() {
                     variant="ghost"
                     className="w-full text-gray-400 hover:text-white"
                   >
-                    ← Back
+                    {t.verification.back}
                   </Button>
                 </div>
               </>
@@ -289,7 +293,7 @@ export default function Verification() {
 
           {/* Aide */}
           <div className="mt-6 text-center text-sm text-gray-500">
-            Need help? Reach us on{" "}
+            {t.verification.needHelp}{" "}
             <a href="https://instagram.com/waler_official" className="text-[#02c950] hover:underline">
               @waler_official
             </a>

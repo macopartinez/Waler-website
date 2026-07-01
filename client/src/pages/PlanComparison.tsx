@@ -5,79 +5,37 @@ import { Crown, Check, X, ArrowLeft, Clock, Sparkles, Zap, Shield, Users, Trendi
 import { GlassText } from '@/components/GlassText';
 import { RadarBackground } from '@/components/RadarBackground';
 import { useOfferCountdown, resolveYearlyPrice, yearlyStandardPrice } from '@/hooks/use-offer-countdown';
+import { useLanguage, interpolate } from '@/contexts/LanguageContext';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 type BillingPeriod = 'monthly' | 'yearly';
 
 interface Plan {
   id: 'premium' | 'pro';
-  name: string;
-  displayName: string;
   priceMonthly: number;
   priceYearly: number;
-  features: string[];
-  highlightedFeatures: string[];
-  limitations: string[];
   popular?: boolean;
   icon: React.ElementType;
 }
 
-const PLANS: Plan[] = [
+const PLAN_META: Plan[] = [
   {
     id: 'premium',
-    name: 'premium',
-    displayName: 'Base',
     priceMonthly: 4.99,
     priceYearly: 47.99,
     icon: Star,
-    features: [
-      '1 Instagram account',
-      '30-day change history',
-      'Real-time unfollower & blocker alerts',
-      'Relationship insights',
-      'PDF export',
-      'Email support',
-    ],
-    highlightedFeatures: [
-      'Unfollower reveal',
-      'Deep insights',
-    ],
-    limitations: [
-      'Personal mode only',
-      'No client / prospect CRM',
-      'Limited to 30-day history',
-    ],
   },
   {
     id: 'pro',
-    name: 'pro',
-    displayName: 'Pro',
     priceMonthly: 14.99,
     priceYearly: 143.99,
     icon: Crown,
     popular: true,
-    features: [
-      'Everything in Base',
-      'Up to 3 Instagram accounts',
-      'Unlimited history',
-      'Personal + Professional dual mode',
-      'Client & prospect CRM (VIP / Keep / Watch)',
-      'DM conversation temperature (hot / warm / cold)',
-      'Lead qualification phases',
-      'Interaction signal timeline',
-      'Contact health & priority scoring',
-      'PDF progress reports',
-      '"Waler Pro Coach" badge',
-    ],
-    highlightedFeatures: [
-      'Full client / prospect CRM',
-      'DM temperature analysis',
-      '3 Instagram accounts',
-    ],
-    limitations: [],
   },
 ];
 
 export default function PlanComparison() {
+  const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('yearly');
   const timeLeft = useOfferCountdown();
@@ -91,6 +49,13 @@ export default function PlanComparison() {
     // For now, redirect to dashboard
     setLocation('/dashboard/1');
   };
+
+  const PLANS = PLAN_META.map((meta) => ({
+    ...meta,
+    displayName: t.planComparison.plans[meta.id].displayName,
+    features: t.planComparison.plans[meta.id].features,
+    limitations: t.planComparison.plans[meta.id].limitations,
+  }));
 
   const getDiscount = () => {
     const premiumMonthly = PLANS[0].priceMonthly * 12;
@@ -115,10 +80,10 @@ export default function PlanComparison() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <button onClick={() => setLocation('/dashboard/1')} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
             <ArrowLeft className="w-5 h-5" />
-            Back
+            {t.planComparison.back}
           </button>
           <GlassText text="WALER" fontSize={32} />
-          <div className="w-20" />
+          <LanguageSwitcher />
         </div>
       </nav>
 
@@ -128,7 +93,7 @@ export default function PlanComparison() {
           <div className="max-w-7xl mx-auto px-6 py-4">
             <div className="flex items-center justify-center gap-4 flex-wrap">
               <Clock className="w-5 h-5 text-red-400 animate-pulse" />
-              <span className="text-red-100 font-bold">Limited offer expires in</span>
+              <span className="text-red-100 font-bold">{t.planComparison.countdownLabel}</span>
               <div className="flex items-center gap-2">
                 <div className="bg-red-500/30 border border-red-500/50 rounded-lg px-3 py-1">
                   <span className="font-mono text-xl font-bold">{formatTime(timeLeft.hours)}</span>
@@ -154,7 +119,7 @@ export default function PlanComparison() {
             <div className="flex items-center justify-center gap-3 flex-wrap text-center">
               <Clock className="w-5 h-5 text-gray-400" />
               <span className="text-gray-300 font-semibold">
-                The special offer has ended — standard pricing now applies.
+                {t.planComparison.offerEnded}
               </span>
             </div>
           </div>
@@ -172,13 +137,13 @@ export default function PlanComparison() {
               className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-full px-4 py-2 mb-4"
             >
               <Sparkles className="w-4 h-4 text-green-400" />
-              <span className="text-green-300 font-semibold text-sm">Unlock the full potential of Waler</span>
+              <span className="text-green-300 font-semibold text-sm">{t.planComparison.badge}</span>
             </motion.div>
             <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-              Choose your plan
+              {t.planComparison.title}
             </h1>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Compare our plans and pick the one that best fits your needs
+              {t.planComparison.subtitle}
             </p>
           </div>
 
@@ -193,7 +158,7 @@ export default function PlanComparison() {
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                Monthly
+                {t.planComparison.monthly}
               </button>
               <button
                 onClick={() => setBillingPeriod('yearly')}
@@ -203,7 +168,7 @@ export default function PlanComparison() {
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                Yearly
+                {t.planComparison.yearly}
                 {offerActive && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
                     -{getDiscount()}%
@@ -219,7 +184,7 @@ export default function PlanComparison() {
               const PlanIcon = plan.icon;
               const yearlyPrice = resolveYearlyPrice(plan.priceMonthly, plan.priceYearly, offerActive);
               const price = billingPeriod === 'monthly' ? plan.priceMonthly : yearlyPrice;
-              const periodLabel = billingPeriod === 'monthly' ? '/month' : '/year';
+              const periodLabel = billingPeriod === 'monthly' ? t.planComparison.perMonth : t.planComparison.perYear;
               
               return (
                 <motion.div
@@ -235,7 +200,7 @@ export default function PlanComparison() {
                 >
                   {plan.popular && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg">
-                      Most popular
+                      {t.planComparison.mostPopular}
                     </div>
                   )}
 
@@ -256,7 +221,7 @@ export default function PlanComparison() {
                     </div>
                     {billingPeriod === 'yearly' && offerActive && (
                       <p className="text-sm text-green-400 mt-2">
-                        Save {getSavingsAmount(plan.id).toFixed(2)}€ compared to monthly
+                        {interpolate(t.planComparison.saveCompared, { amount: getSavingsAmount(plan.id).toFixed(2) })}
                       </p>
                     )}
                   </div>
@@ -270,14 +235,14 @@ export default function PlanComparison() {
                         : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-[0_0_20px_rgba(34,197,94,0.5)]'
                     }`}
                   >
-                    Choose {plan.displayName}
+                    {interpolate(t.planComparison.chooseButton, { plan: plan.displayName })}
                   </button>
 
                   {/* Features */}
                   <div className="space-y-4">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                       <Check className="w-5 h-5 text-green-400" />
-                      Included
+                      {t.planComparison.included}
                     </h3>
                     {plan.features.map((feature, idx) => (
                       <div key={idx} className="flex items-start gap-3">
@@ -290,7 +255,7 @@ export default function PlanComparison() {
                       <>
                         <h3 className="font-bold text-lg mb-4 mt-8 flex items-center gap-2">
                           <X className="w-5 h-5 text-red-400" />
-                          Limitations
+                          {t.planComparison.limitations}
                         </h3>
                         {plan.limitations.map((limitation, idx) => (
                           <div key={idx} className="flex items-start gap-3">
@@ -311,19 +276,19 @@ export default function PlanComparison() {
             <div className="flex flex-wrap justify-center gap-8">
               <div className="flex items-center gap-2 text-gray-400">
                 <Shield className="w-5 h-5" />
-                <span>Secure payment</span>
+                <span>{t.planComparison.trust.securePayment}</span>
               </div>
               <div className="flex items-center gap-2 text-gray-400">
                 <Zap className="w-5 h-5" />
-                <span>Instant activation</span>
+                <span>{t.planComparison.trust.instantActivation}</span>
               </div>
               <div className="flex items-center gap-2 text-gray-400">
                 <Users className="w-5 h-5" />
-                <span>10,000+ users</span>
+                <span>{t.planComparison.trust.users}</span>
               </div>
               <div className="flex items-center gap-2 text-gray-400">
                 <TrendingUp className="w-5 h-5" />
-                <span>Cancel anytime</span>
+                <span>{t.planComparison.trust.cancelAnytime}</span>
               </div>
             </div>
           </div>

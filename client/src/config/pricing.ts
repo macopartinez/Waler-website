@@ -61,6 +61,17 @@ export function getPlanById(id: SubscriptionTier): PricingPlan | undefined {
   return PRICING_PLANS.find(plan => plan.id === id);
 }
 
+// Merges the static plan config (price, trial length, id…) with the
+// localized copy (name, CTA, feature list) for the active language.
+export function getLocalizedPricingPlans(t: {
+  pricing: { plans: Record<SubscriptionTier, { name: string; cta: string; features: string[] }> };
+}): PricingPlan[] {
+  return PRICING_PLANS.map((plan) => ({
+    ...plan,
+    ...t.pricing.plans[plan.id],
+  }));
+}
+
 export function isPremiumFeature(feature: string): boolean {
   const premiumFeatures = [
     'ai_insights',

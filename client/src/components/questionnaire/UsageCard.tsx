@@ -1,5 +1,6 @@
 import { UsageMode } from "@/types/questionnaire";
 import { User, Users } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface UsageCardProps {
   mode: UsageMode;
@@ -8,17 +9,16 @@ interface UsageCardProps {
 }
 
 export function UsageCard({ mode, selected, onClick }: UsageCardProps) {
+  const { t } = useLanguage();
   const content = {
     personal: {
       icon: User,
-      title: "Personal use",
-      description: "I want to keep an eye on what and who I am with others."
+      ...t.onboard.usageCard.personal,
     },
     professional: {
       icon: Users,
-      title: "Professional use",
-      description: "I live mainly through virtual relationships and want to better understand them."
-    }
+      ...t.onboard.usageCard.professional,
+    },
   };
 
   const { icon: Icon, title, description } = content[mode];

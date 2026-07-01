@@ -14,6 +14,7 @@ import { QuestionTextarea } from "@/components/questionnaire/QuestionTextarea";
 import { WarningBox } from "@/components/questionnaire/WarningBox";
 import { UsageCard } from "@/components/questionnaire/UsageCard";
 import { PaywallStep } from "@/components/PaywallStep";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // Flux: Questionnaire (0-7) → Setting up account (8, identifiant du compte de
 // référence) → PAYWALL (9) → Email (10) → Password (11).
@@ -28,6 +29,7 @@ const PASSWORD_STEP = EMAIL_STEP + 1;
 const TOTAL_STEPS = PASSWORD_STEP + 1;
 
 export default function Onboard() {
+  const { t, language } = useLanguage();
   const [showIntro, setShowIntro] = useState(true);
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -60,7 +62,7 @@ export default function Onboard() {
   // Jeu d'étapes affiché : personnel par défaut, professionnel dès que le mode
   // « professional » est choisi (étape 1). Les étapes 0/1 sont identiques en
   // structure, donc le basculement après sélection est transparent.
-  const questionnaireSteps = getQuestionnaireSteps(usageMode);
+  const questionnaireSteps = getQuestionnaireSteps(usageMode, language);
 
   const isQuestionnairePhase = step <= QUESTIONNAIRE_END;
 
@@ -73,31 +75,27 @@ export default function Onboard() {
     setQuestionnaireAnswers(prev => ({ ...prev, [questionId]: value }));
   };
 
-  // Valeur stockée pour une option (toujours une string, jamais l'objet {main, sub}).
-  const optionValue = (opt: { main: string } | string) =>
-    typeof opt === 'string' ? opt : opt.main;
-
   const stepTitle = useMemo(() => {
     if (step <= QUESTIONNAIRE_END) {
       return questionnaireSteps[step]?.title || '';
     }
-    if (step === SETUP_STEP) return "Setting up your account";
-    if (step === PAYWALL_STEP) return "Unlock your personalized insights";
-    if (step === EMAIL_STEP) return "What's your email?";
-    if (step === PASSWORD_STEP) return "Create a secure password";
+    if (step === SETUP_STEP) return t.onboard.stepTitles.setup;
+    if (step === PAYWALL_STEP) return t.onboard.stepTitles.paywall;
+    if (step === EMAIL_STEP) return t.onboard.stepTitles.email;
+    if (step === PASSWORD_STEP) return t.onboard.stepTitles.password;
     return '';
-  }, [step, questionnaireSteps]);
+  }, [step, questionnaireSteps, t]);
 
   const stepPhase = useMemo(() => {
     if (step <= QUESTIONNAIRE_END) {
       return questionnaireSteps[step]?.phase || '';
     }
-    if (step === SETUP_STEP) return 'Setting up account';
-    if (step === PAYWALL_STEP) return 'Choose Your Plan';
-    if (step === EMAIL_STEP) return 'Account Setup 2/3';
-    if (step === PASSWORD_STEP) return 'Account Setup 3/3';
+    if (step === SETUP_STEP) return t.onboard.stepPhases.setup;
+    if (step === PAYWALL_STEP) return t.onboard.stepPhases.paywall;
+    if (step === EMAIL_STEP) return t.onboard.stepPhases.email;
+    if (step === PASSWORD_STEP) return t.onboard.stepPhases.password;
     return '';
-  }, [step, questionnaireSteps]);
+  }, [step, questionnaireSteps, t]);
 
   const canProceed = () => {
     // Questionnaire phase
@@ -106,8 +104,10 @@ export default function Onboard() {
     if (step === QUESTIONNAIRE_END) return true; // Summary page
     if (step > 1 && step < QUESTIONNAIRE_END) {
       // Une étape est valide quand toutes ses questions requises ont une réponse.
+      // (index 0 est une réponse valide pour les questions à choix : on vérifie
+      // donc l'absence de valeur plutôt que sa «truthiness»).
       return questionnaireSteps[step].questions.every(
-        (q) => !q.required || Boolean(questionnaireAnswers[q.id])
+        (q) => !q.required || (questionnaireAnswers[q.id] !== undefined && questionnaireAnswers[q.id] !== '')
       );
     }
 
@@ -271,26 +271,13 @@ export default function Onboard() {
 
   // ── INTRO : guide rapide façon Trendtrack, avant le questionnaire ──
   if (showIntro) {
-    const introCards = [
-      {
-        num: 1,
-        title: "Tell us about you",
-        desc: "Answer a few quick questions so Waler is tailored to your situation — no account needed yet.",
-        icon: CheckCircle2,
-      },
-      {
-        num: 2,
-        title: "Choose your plan",
-        desc: "Unlock your personalized insights. Pick the plan that fits how you want to use Waler.",
-        icon: Instagram,
-      },
-      {
-        num: 3,
-        title: "Connect & track",
-        desc: "After joining, install the extension and log into your Instagram once — then track follows, unfollows and ghost followers.",
-        icon: Puzzle,
-      },
-    ];
+    const introIcons = [CheckCircle2, Instagram, Puzzle];
+    const introCards = t.onboard.intro.cards.map((card, i) => ({
+      num: i + 1,
+      title: card.title,
+      desc: card.desc,
+      icon: introIcons[i],
+    }));
 
     return (
       <div className="min-h-screen w-full bg-[#0a0a0a] relative font-body text-white">
@@ -308,10 +295,10 @@ export default function Onboard() {
           >
             <div className="text-center mb-14">
               <h1 className="text-4xl md:text-5xl font-display font-black text-white tracking-tight mb-3 text-readable">
-                Welcome to Waler
+                {t.onboard.intro.title}
               </h1>
               <p className="text-gray-400 text-lg text-readable">
-                Follow this quick guide to get the most out of Waler while you browse.
+                {t.onboard.intro.subtitle}
               </p>
             </div>
 
@@ -342,14 +329,14 @@ export default function Onboard() {
                 data-testid="button-intro-back"
               >
                 <ArrowLeft className="w-4 h-4" />
-                Back
+                {t.onboard.intro.back}
               </button>
               <button
                 onClick={() => setShowIntro(false)}
                 className="flex items-center gap-2 px-8 py-4 rounded-full text-base font-bold bg-[#02c950] text-black shadow-[0_0_30px_rgba(2,201,80,0.4)] hover:shadow-[0_0_40px_rgba(2,201,80,0.6)] transition-all duration-300"
                 data-testid="button-intro-continue"
               >
-                Get Started
+                {t.onboard.intro.getStarted}
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -435,8 +422,8 @@ export default function Onboard() {
                     />
                     <span className="text-sm text-gray-300 leading-relaxed">
                       {usageMode === 'professional'
-                        ? 'I understand that this tool helps me manage relationships and prospects responsibly. I commit to using it ethically, with respect for the people I reach out to.'
-                        : 'I understand that this questionnaire is a space for personal reflection. I commit to using it with kindness toward myself and others.'}
+                        ? t.onboard.consent.professional
+                        : t.onboard.consent.personal}
                     </span>
                   </div>
                 </div>
@@ -480,8 +467,8 @@ export default function Onboard() {
                             <QuestionOption
                               key={i}
                               option={opt}
-                              selected={questionnaireAnswers[q.id] === optionValue(opt)}
-                              onClick={() => updateAnswer(q.id, optionValue(opt))}
+                              selected={questionnaireAnswers[q.id] === i}
+                              onClick={() => updateAnswer(q.id, i)}
                             />
                           ))}
                         </div>
@@ -505,24 +492,24 @@ export default function Onboard() {
               {step === QUESTIONNAIRE_END && (
                 <div className="w-full max-w-2xl space-y-8">
                   <div className="inline-block px-4 py-1.5 rounded-full bg-[#1a1a1a] border border-white/30 text-sm mb-6">
-                    {usageMode === 'personal' ? 'Personal use' : 'Professional use'}
+                    {usageMode === 'personal' ? t.onboard.summary.badgePersonal : t.onboard.summary.badgeProfessional}
                   </div>
 
                   <div className="bg-[#1a1a1a] border border-white/30 rounded-xl p-6 space-y-4">
-                    <h3 className="text-lg font-semibold text-white">What you've done</h3>
+                    <h3 className="text-lg font-semibold text-white">{t.onboard.summary.doneTitle}</h3>
                     <p className="text-gray-300 leading-relaxed">
                       {usageMode === 'professional'
-                        ? "You mapped out how you work today — your activity, your pipeline, and where leads slip through the cracks. That clarity is exactly what a good system builds on."
-                        : "You stepped back from a difficult situation and looked at it honestly — including your own part in it. This isn't about guilt; it's about understanding."}
+                        ? t.onboard.summary.doneProfessional
+                        : t.onboard.summary.donePersonal}
                     </p>
                   </div>
 
                   <div className="bg-[#1a1a1a] border border-white/30 rounded-xl p-6 space-y-4">
-                    <h3 className="text-lg font-semibold text-white">Next step</h3>
+                    <h3 className="text-lg font-semibold text-white">{t.onboard.summary.nextTitle}</h3>
                     <p className="text-gray-300 leading-relaxed">
                       {usageMode === 'professional'
-                        ? "Let's create your Waler account so you can turn social signals into a pipeline — and never let a warm lead go cold again."
-                        : "Now that you've reflected on your situation, let's create your Waler account to help you track your relationships in a healthy and caring way."}
+                        ? t.onboard.summary.nextProfessional
+                        : t.onboard.summary.nextPersonal}
                     </p>
                   </div>
                 </div>
@@ -532,15 +519,14 @@ export default function Onboard() {
               {step === SETUP_STEP && (
                 <div className="w-full max-w-md space-y-6">
                   <p className="text-center text-gray-400 -mt-2 text-readable">
-                    Which Instagram account do you want to track? This becomes your{' '}
-                    <span className="text-white font-medium">main account</span> — you can
-                    add others later.
+                    {t.onboard.setup.question}{' '}
+                    <span className="text-white font-medium">{t.onboard.setup.mainAccount}</span> {t.onboard.setup.questionEnd}
                   </p>
 
                   {/* Identifiant du compte de référence */}
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-300 px-1 text-readable">
-                      Your Instagram username
+                      {t.onboard.setup.label}
                     </label>
                     <div className="relative">
                       <AtSign className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
@@ -549,7 +535,7 @@ export default function Onboard() {
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="your_username"
+                        placeholder={t.onboard.setup.placeholder}
                         autoFocus
                         className="w-full pl-14 pr-6 py-4 rounded-2xl bg-[#060606]/90 backdrop-blur-xl border border-white/10 text-white text-lg placeholder:text-gray-600 focus:outline-none focus:border-[#02c950] focus:shadow-[0_0_30px_rgba(2,201,80,0.15)] transition-all"
                         data-testid="input-username"
@@ -562,9 +548,8 @@ export default function Onboard() {
                       <div className="flex items-start gap-2 px-1">
                         <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                         <p className="text-xs text-amber-300/90 leading-snug text-readable">
-                          Double-check the spelling — make sure{' '}
-                          <span className="font-medium text-amber-200">@{username.trim()}</span> is exactly
-                          your Instagram username. We'll confirm it on the next step.
+                          {t.onboard.setup.typoWarning}{' '}
+                          <span className="font-medium text-amber-200">@{username.trim()}</span> {t.onboard.setup.typoWarningEnd}
                         </p>
                       </div>
                     )}
@@ -574,24 +559,23 @@ export default function Onboard() {
                   <div className="oled-card rounded-2xl p-5 space-y-3">
                     <h3 className="flex items-center gap-2 text-white font-bold text-sm">
                       <Puzzle className="w-4 h-4 text-[#02c950]" />
-                      What happens next
+                      {t.onboard.setup.whatsNext}
                     </h3>
                     <p className="text-sm text-gray-400 leading-relaxed">
-                      After you join, you'll install the <span className="text-white">Waler extension</span> and
-                      log into this Instagram account once. That confirms it's really yours and turns it into your{' '}
-                      <span className="text-white">reference account</span>.
+                      {t.onboard.setup.whatsNextBody} <span className="text-white">{t.onboard.setup.extension}</span>{' '}
+                      {t.onboard.setup.whatsNextBody2}{' '}
+                      <span className="text-white">{t.onboard.setup.referenceAccount}</span>.
                     </p>
                     <p className="text-sm text-gray-400 leading-relaxed flex items-start gap-2">
                       <CheckCircle2 className="w-4 h-4 text-[#02c950] flex-shrink-0 mt-0.5" />
-                      <span>From there you can link <span className="text-white">additional accounts</span> to the same plan.</span>
+                      <span>{t.onboard.setup.whatsNextBullet} <span className="text-white">{t.onboard.setup.additionalAccounts}</span> {t.onboard.setup.whatsNextBulletEnd}</span>
                     </p>
                   </div>
 
                   <div className="flex items-start gap-2 px-1">
                     <Instagram className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-gray-300 leading-snug text-readable">
-                      Tip: be ready to log into <span className="text-white font-medium">@{username || 'this account'}</span> in
-                      your browser — it's the one we'll verify.
+                      {t.onboard.setup.tip} <span className="text-white font-medium">@{username || t.onboard.setup.tipAccount}</span> {t.onboard.setup.tipEnd}
                     </p>
                   </div>
                 </div>
@@ -645,7 +629,7 @@ export default function Onboard() {
                       data-testid="input-password"
                     />
                   </div>
-                  <p className="text-gray-500 text-sm mt-3 text-center text-readable">Minimum 8 characters</p>
+                  <p className="text-gray-500 text-sm mt-3 text-center text-readable">{t.onboard.buttons.minChars}</p>
                 </div>
               )}
 
@@ -659,7 +643,7 @@ export default function Onboard() {
               data-testid="button-back"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back
+              {t.onboard.buttons.back}
             </button>
 
             <button
@@ -675,11 +659,11 @@ export default function Onboard() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating account...
+                  {t.onboard.buttons.creatingAccount}
                 </>
               ) : (
                 <>
-                  Continue
+                  {t.onboard.buttons.continue}
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

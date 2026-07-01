@@ -1,10 +1,16 @@
 import { motion } from "framer-motion";
 import { Shield, Lock, Eye, Database, CheckCircle, BarChart2 } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 export default function Privacy() {
+  const { t } = useLanguage();
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-950 text-white">
       <div className="max-w-4xl mx-auto px-6 py-20">
+        <div className="flex justify-end mb-8">
+          <LanguageSwitcher />
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
@@ -15,10 +21,10 @@ export default function Privacy() {
               <Shield className="w-10 h-10 text-green-400" />
             </div>
             <h1 className="text-5xl md:text-6xl font-display font-black mb-6 text-white tracking-tighter">
-              Privacy <span className="text-gradient">Policy</span>
+              {t.privacyPage.title1} <span className="text-gradient">{t.privacyPage.title2}</span>
             </h1>
             <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              Your privacy is our top priority. Here's how we protect your data.
+              {t.privacyPage.subtitle}
             </p>
           </div>
 
@@ -34,30 +40,20 @@ export default function Privacy() {
                   <Database className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Data Collection</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.privacyPage.dataCollection.title}</h2>
                   <p className="text-gray-300 leading-relaxed mb-4">
-                    Waler collects only the data necessary to provide its follower-tracking and DM analysis service. The browser extension reads data directly from Instagram's web interface (DOM and network responses) while you are logged in. No data is collected when you are not using the extension.
+                    {t.privacyPage.dataCollection.p1}
                   </p>
                   <p className="text-gray-300 leading-relaxed mb-4">
-                    The following data may be collected and stored:
+                    {t.privacyPage.dataCollection.p2}
                   </p>
                   <ul className="space-y-2 text-gray-400">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Your Instagram username and profile information
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Your followers and following lists (to detect changes)
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      DM conversation content (encrypted, for the coach feature)
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Instagram session cookies (used solely to authenticate requests)
-                    </li>
+                    {t.privacyPage.dataCollection.items.map((item, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                        {item}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               </div>
@@ -74,27 +70,17 @@ export default function Privacy() {
                   <Lock className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Data Security</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.privacyPage.dataSecurity.title}</h2>
                   <p className="text-gray-300 leading-relaxed mb-4">
-                    We apply industry-standard security measures to protect your data at every stage.
+                    {t.privacyPage.dataSecurity.p1}
                   </p>
                   <ul className="space-y-2 text-gray-400">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      AES-256-GCM encryption of DM content at rest
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Encrypted connections (TLS) for all data in transit
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Passwords stored as salted bcrypt hashes
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Instagram session cookies are never transmitted to third parties
-                    </li>
+                    {t.privacyPage.dataSecurity.items.map((item, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                        {item}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               </div>
@@ -111,27 +97,17 @@ export default function Privacy() {
                   <Eye className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Data Usage</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.privacyPage.dataUsage.title}</h2>
                   <p className="text-gray-300 leading-relaxed mb-4">
-                    Your data is used exclusively to provide you with the Waler service:
+                    {t.privacyPage.dataUsage.p1}
                   </p>
                   <ul className="space-y-2 text-gray-400">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Detect changes in your followers and following
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Generate analytics and statistics about your account
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Power the DM coach feature (conversation analysis)
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Send tracking notifications
-                    </li>
+                    {t.privacyPage.dataUsage.items.map((item, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                        {item}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               </div>
@@ -148,22 +124,22 @@ export default function Privacy() {
                   <BarChart2 className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Third-Party Analytics</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.privacyPage.analytics.title}</h2>
                   <p className="text-gray-300 leading-relaxed mb-4">
-                    Our website uses the following third-party analytics tools to improve user experience. These tools may collect anonymized usage data such as page views, clicks, and navigation patterns.
+                    {t.privacyPage.analytics.p1}
                   </p>
                   <ul className="space-y-3 text-gray-400">
                     <li className="flex items-start gap-2">
                       <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                      <span><strong className="text-gray-300">Google Analytics (GA4)</strong> — collects anonymized traffic and behavior data. Governed by <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300 transition-colors">Google's Privacy Policy</a>.</span>
+                      <span><strong className="text-gray-300">{t.privacyPage.analytics.ga4Bold}</strong> {t.privacyPage.analytics.ga4Rest} <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300 transition-colors">{t.privacyPage.analytics.ga4LinkText}</a>.</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                      <span><strong className="text-gray-300">Microsoft Clarity</strong> — records anonymized session replays and heatmaps to help us understand how users interact with the site. Governed by <a href="https://privacy.microsoft.com/privacystatement" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300 transition-colors">Microsoft's Privacy Statement</a>.</span>
+                      <span><strong className="text-gray-300">{t.privacyPage.analytics.clarityBold}</strong> {t.privacyPage.analytics.clarityRest} <a href="https://privacy.microsoft.com/privacystatement" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300 transition-colors">{t.privacyPage.analytics.clarityLinkText}</a>.</span>
                     </li>
                   </ul>
                   <p className="text-gray-400 leading-relaxed mt-4 text-sm">
-                    These tools do not have access to your Instagram data or your Waler account content.
+                    {t.privacyPage.analytics.note}
                   </p>
                 </div>
               </div>
@@ -180,12 +156,12 @@ export default function Privacy() {
                   <Shield className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">No-Commercialization Commitment</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.privacyPage.noCommercialization.title}</h2>
                   <p className="text-gray-300 leading-relaxed mb-4">
-                    <strong className="text-green-400">Your data will never be sold or transferred to third parties for commercial purposes.</strong>
+                    <strong className="text-green-400">{t.privacyPage.noCommercialization.bold}</strong>
                   </p>
                   <p className="text-gray-300 leading-relaxed">
-                    We never sell, trade, or rent your personal information to any external company. Your data stays strictly confidential and is used solely to operate our service. We only share your data with your explicit consent or when required by law.
+                    {t.privacyPage.noCommercialization.p2}
                   </p>
                 </div>
               </div>
@@ -202,31 +178,17 @@ export default function Privacy() {
                   <CheckCircle className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold mb-3 text-white">Your Rights</h2>
+                  <h2 className="text-2xl font-bold mb-3 text-white">{t.privacyPage.yourRights.title}</h2>
                   <p className="text-gray-300 leading-relaxed mb-4">
-                    In accordance with GDPR and data protection laws, you have the following rights:
+                    {t.privacyPage.yourRights.p1}
                   </p>
                   <ul className="space-y-2 text-gray-400">
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Access your personal data
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Request correction of your data
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Request deletion of your data
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Export your data
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      Revoke your consent
-                    </li>
+                    {t.privacyPage.yourRights.items.map((item, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                        {item}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               </div>
@@ -238,9 +200,9 @@ export default function Privacy() {
               transition={{ delay: 0.7 }}
               className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8"
             >
-              <h2 className="text-2xl font-bold mb-4 text-white">Contact</h2>
+              <h2 className="text-2xl font-bold mb-4 text-white">{t.privacyPage.contact.title}</h2>
               <p className="text-gray-300 leading-relaxed">
-                For any question about our privacy policy or how we use your data, feel free to reach out at:{' '}
+                {t.privacyPage.contact.prefix}{' '}
                 <a href="mailto:walerwebsite@outlook.com" className="text-green-400 hover:text-green-300 transition-colors">
                   walerwebsite@outlook.com
                 </a>
@@ -253,7 +215,7 @@ export default function Privacy() {
               transition={{ delay: 0.8 }}
               className="text-center text-sm text-gray-500 pt-8"
             >
-              Last updated: June 2026
+              {t.privacyPage.lastUpdated}
             </motion.div>
           </div>
         </motion.div>
