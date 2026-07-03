@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ProspectStatus, Circle } from "./types";
 import type { InstagramAccount } from "@/hooks/use-accounts";
 import { checkInstagramUsername } from "@/lib/extension";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface AddPersonModalProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ export interface NewPersonData {
 }
 
 export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccountId }: AddPersonModalProps) {
+  const { t } = useLanguage();
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [followsYou, setFollowsYou] = useState(false);
@@ -67,12 +69,12 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
   const handleSubmit = async () => {
     if (!username.trim() || !displayName.trim()) return;
     if (!isProspect && !isInCircle) {
-      alert("Check at least one option: Prospect or Circle");
+      alert(t.addPersonModal.checkOneOption);
       return;
     }
     const selectedAccount = accounts.find((a) => a.id === accountId);
     if (!selectedAccount) {
-      alert("Choose the account you're in contact with this person through");
+      alert(t.addPersonModal.chooseAccount);
       return;
     }
 
@@ -152,8 +154,8 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                     <UserPlus className="w-5 h-5 text-green-400" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-display font-black text-white">Add a Person</h2>
-                    <p className="text-xs text-gray-400">Add someone to your network</p>
+                    <h2 className="text-xl font-display font-black text-white">{t.addPersonModal.title}</h2>
+                    <p className="text-xs text-gray-400">{t.addPersonModal.subtitle}</p>
                   </div>
                 </div>
               </div>
@@ -163,7 +165,7 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                 {/* Instagram Username */}
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
-                    Instagram Username *
+                    {t.addPersonModal.usernameLabel}
                   </label>
                   <div className="relative">
                     <Instagram className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
@@ -171,7 +173,7 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                       type="text"
                       value={username}
                       onChange={(e) => handleUsernameChange(e.target.value)}
-                      placeholder="username"
+                      placeholder={t.addPersonModal.usernamePlaceholder}
                       className={`w-full pl-12 pr-4 py-2 rounded-xl bg-black/80 backdrop-blur-sm border text-white placeholder:text-gray-500 focus:outline-none transition-colors text-sm ${
                         checkState === "not_found"
                           ? "border-amber-500/60 focus:border-amber-500"
@@ -183,8 +185,7 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                     <div className="flex items-start gap-2 mt-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
                       <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-amber-200">
-                        We couldn't find <strong>@{username.trim().replace(/^@/, "")}</strong> on Instagram.
-                        Double-check for a typo, or click <strong>Add anyway</strong> to keep it.
+                        {t.addPersonModal.notFoundPrefix} <strong>@{username.trim().replace(/^@/, "")}</strong> {t.addPersonModal.notFoundMiddle} <strong>{t.addPersonModal.notFoundButton}</strong> {t.addPersonModal.notFoundEnd}
                       </p>
                     </div>
                   )}
@@ -193,13 +194,13 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                 {/* Display Name */}
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
-                    Display name *
+                    {t.addPersonModal.displayNameLabel}
                   </label>
                   <input
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="How you want to identify this person"
+                    placeholder={t.addPersonModal.displayNamePlaceholder}
                     className="w-full px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-green-500 transition-colors text-sm"
                   />
                 </div>
@@ -207,35 +208,35 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                 {/* Compte de contact (obligatoire) */}
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
-                    Contact account *
+                    {t.addPersonModal.contactAccountLabel}
                   </label>
                   <select
                     value={accountId ?? ''}
                     onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : null)}
                     className="w-full px-4 py-2 rounded-xl bg-black/80 backdrop-blur-sm border border-white/10 text-white focus:outline-none focus:border-green-500 transition-colors text-sm [&>option]:bg-black [&>option]:text-white"
                   >
-                    <option value="" disabled>Choose an account…</option>
+                    <option value="" disabled>{t.addPersonModal.chooseAccountPlaceholder}</option>
                     {accounts.map((a) => (
                       <option key={a.id} value={a.id}>
-                        @{a.username}{a.isOwner ? ' (primary)' : ''}
+                        @{a.username}{a.isOwner ? t.addPersonModal.primarySuffix : ''}
                       </option>
                     ))}
                   </select>
                   <p className="text-xs text-gray-500 mt-1.5">
-                    Which account are you in contact with this person through? Used to filter your network.
+                    {t.addPersonModal.contactAccountHint}
                   </p>
                 </div>
 
                 {/* Sector */}
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
-                    Sector (optional)
+                    {t.addPersonModal.sectorLabel}
                   </label>
                   <input
                     type="text"
                     value={sector}
                     onChange={(e) => setSector(e.target.value)}
-                    placeholder="e.g., coaching, e-commerce, tech..."
+                    placeholder={t.addPersonModal.sectorPlaceholder}
                     className="w-full px-4 py-2 rounded-xl bg-black/80 backdrop-blur-sm border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-green-500 transition-colors text-sm"
                   />
                 </div>
@@ -249,7 +250,7 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                       onChange={(e) => setFollowsYou(e.target.checked)}
                       className="w-4 h-4 rounded border-white/20 bg-white/5 text-green-500 focus:ring-green-500"
                     />
-                    <span className="text-sm text-white">Follows you</span>
+                    <span className="text-sm text-white">{t.addPersonModal.followsYou}</span>
                   </label>
                   <label className="flex items-center gap-2 px-4 py-3 rounded-xl bg-black/80 backdrop-blur-sm border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
                     <input
@@ -258,7 +259,7 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                       onChange={(e) => setYouFollow(e.target.checked)}
                       className="w-4 h-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
                     />
-                    <span className="text-sm text-white">You follow them</span>
+                    <span className="text-sm text-white">{t.addPersonModal.youFollowThem}</span>
                   </label>
                 </div>
 
@@ -266,8 +267,7 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                 <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-black/80 backdrop-blur-sm border border-green-500/20">
                   <Lightbulb className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                   <div className="text-sm text-green-200">
-                    <strong>Tip:</strong> Check "Prospect" if you want to convert this person,
-                    "Circle" to maintain/watch the relationship. You can check both!
+                    <strong>{t.addPersonModal.tipLabel}</strong> {t.addPersonModal.tipBody}
                   </div>
                 </div>
 
@@ -280,9 +280,9 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                       onChange={(e) => setIsProspect(e.target.checked)}
                       className="w-4 h-4 rounded border-white/20 bg-white/5 text-green-500 focus:ring-green-500"
                     />
-                    <span className="text-sm font-semibold text-white">Track as PROSPECT</span>
+                    <span className="text-sm font-semibold text-white">{t.addPersonModal.trackAsProspect}</span>
                   </label>
-                  
+
                   {isProspect && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
@@ -290,16 +290,16 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                       exit={{ opacity: 0, height: 0 }}
                     >
                       <label className="block text-sm font-medium text-white mb-2">
-                        Initial status
+                        {t.addPersonModal.initialStatus}
                       </label>
                       <select
                         value={prospectStatus}
                         onChange={(e) => setProspectStatus(e.target.value as ProspectStatus)}
                         className="w-full px-4 py-2 rounded-xl bg-black/80 backdrop-blur-sm border border-white/10 text-white focus:outline-none focus:border-green-500 transition-colors text-sm [&>option]:bg-black [&>option]:text-white"
                       >
-                        <option value="cold">Cold</option>
-                        <option value="warm">Warm</option>
-                        <option value="hot">Hot</option>
+                        <option value="cold">{t.addPersonModal.statusCold}</option>
+                        <option value="warm">{t.addPersonModal.statusWarm}</option>
+                        <option value="hot">{t.addPersonModal.statusHot}</option>
                       </select>
                     </motion.div>
                   )}
@@ -314,9 +314,9 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                       onChange={(e) => setIsInCircle(e.target.checked)}
                       className="w-4 h-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500"
                     />
-                    <span className="text-sm font-semibold text-white">Add to a CIRCLE</span>
+                    <span className="text-sm font-semibold text-white">{t.addPersonModal.addToCircle}</span>
                   </label>
-                  
+
                   {isInCircle && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
@@ -324,16 +324,16 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                       exit={{ opacity: 0, height: 0 }}
                     >
                       <label className="block text-sm font-medium text-white mb-2">
-                        Priority circle
+                        {t.addPersonModal.priorityCircle}
                       </label>
                       <select
                         value={circle}
                         onChange={(e) => setCircle(e.target.value as Circle)}
                         className="w-full px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-blue-500 transition-colors text-sm [&>option]:bg-black [&>option]:text-white"
                       >
-                        <option value="vip">VIP (Max 10)</option>
-                        <option value="keep">To keep (Max 50)</option>
-                        <option value="watch">To watch (Max 100)</option>
+                        <option value="vip">{t.addPersonModal.circleVip}</option>
+                        <option value="keep">{t.addPersonModal.circleKeep}</option>
+                        <option value="watch">{t.addPersonModal.circleWatch}</option>
                       </select>
                     </motion.div>
                   )}
@@ -346,7 +346,7 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                   onClick={onClose}
                   className="flex-1 px-4 py-2 rounded-xl bg-black/80 backdrop-blur-sm hover:bg-white/10 text-white font-medium transition-colors text-sm"
                 >
-                  Cancel
+                  {t.addPersonModal.cancel}
                 </button>
                 <button
                   onClick={handleSubmit}
@@ -360,17 +360,17 @@ export function AddPersonModal({ isOpen, onClose, onAdd, accounts, defaultAccoun
                   {checkState === "checking" ? (
                     <span className="flex items-center justify-center gap-2">
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Checking...
+                      {t.addPersonModal.checking}
                     </span>
                   ) : isLoading ? (
                     <span className="flex items-center justify-center gap-2">
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Adding...
+                      {t.addPersonModal.adding}
                     </span>
                   ) : checkState === "not_found" ? (
-                    "Add anyway"
+                    t.addPersonModal.addAnyway
                   ) : (
-                    "Add"
+                    t.addPersonModal.add
                   )}
                 </button>
               </div>

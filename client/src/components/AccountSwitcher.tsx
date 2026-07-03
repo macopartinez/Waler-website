@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check, Plus, User } from "lucide-react";
 import { useAccounts, type InstagramAccount } from "@/hooks/use-accounts";
 import { fallbackAvatar } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface AccountSwitcherProps {
   /** Compte Instagram actuellement affiché par le dashboard (sélection locale). */
@@ -20,6 +21,7 @@ export function AccountSwitcher({ value, onChange }: AccountSwitcherProps) {
   const { data, isLoading } = useAccounts();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
@@ -69,7 +71,7 @@ export function AccountSwitcher({ value, onChange }: AccountSwitcherProps) {
       {open && (
         <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[#161616] border border-white/10 shadow-2xl overflow-hidden z-[60]">
           <div className="px-3 py-2 text-[11px] uppercase tracking-wider text-gray-500 font-bold">
-            Comptes Instagram
+            {t.accountSwitcher.instagramAccounts}
           </div>
           <div className="max-h-72 overflow-y-auto">
             {accounts.map((a) => {
@@ -86,8 +88,8 @@ export function AccountSwitcher({ value, onChange }: AccountSwitcherProps) {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-white truncate">@{a.username}</div>
                     <div className="text-[11px] text-gray-500">
-                      {a.isOwner ? "Primary account" : "Linked account"}
-                      {typeof a.followersCount === "number" ? ` · ${a.followersCount} followers` : ""}
+                      {a.isOwner ? t.accountSwitcher.primaryAccount : t.accountSwitcher.linkedAccount}
+                      {typeof a.followersCount === "number" ? ` · ${a.followersCount} ${t.accountSwitcher.followersSuffix}` : ""}
                     </div>
                   </div>
                   {isActive && <Check className="w-4 h-4 text-green-400 flex-shrink-0" />}
@@ -101,7 +103,7 @@ export function AccountSwitcher({ value, onChange }: AccountSwitcherProps) {
             rel="noreferrer"
             className="flex items-center gap-2 px-3 py-2.5 border-t border-white/10 text-sm font-semibold text-green-400 hover:bg-white/5 transition-colors"
           >
-            <Plus className="w-4 h-4" /> Lier un compte (via l'extension)
+            <Plus className="w-4 h-4" /> {t.accountSwitcher.linkAccount}
           </a>
         </div>
       )}

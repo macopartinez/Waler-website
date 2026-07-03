@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Heart } from "lucide-react";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
+import type { Translations } from "@/lib/i18n/en";
 
 interface RevealGateProps {
   onReveal: () => void;
@@ -26,100 +28,34 @@ interface QuestionTheme {
   options: { value: string; label: string }[];
 }
 
-// Pool de questions. Les libellés restent introspectifs, doux et ouverts —
-// un signal, pas un verdict (voir la philosophie du tunnel de vente).
-const QUESTION_POOL: QuestionTheme[] = [
-  {
-    id: 'feeling',
-    type: 'single',
-    titles: [
-      'Before we show you who it is — how are you feeling right now?',
-      'Take a second before we continue — what\'s present for you right now?',
-      'Before the name appears — where\'s your head at this moment?',
-    ],
-    options: [
-      { value: 'anxious', label: 'A little tense, my mind is moving fast' },
-      { value: 'curious', label: 'Curious but calm' },
-      { value: 'suspicion', label: 'I have a quiet sense of who it might be' },
-      { value: 'mixed', label: 'A mix of things I can\'t quite name' },
-    ],
-  },
-  {
-    id: 'recentTension',
-    type: 'single',
-    titles: [
-      'In the past few weeks, has anything felt different with the people close to you?',
-      'Lately, have your connections felt the way they usually do?',
-      'Looking back over the last month — has anything shifted in how people show up for you?',
-    ],
-    options: [
-      { value: 'yes_tension', label: 'Yes — I noticed a bit of distance somewhere' },
-      { value: 'little_distance', label: 'A little — nothing I could put my finger on' },
-      { value: 'normal', label: 'No — things felt steady to me' },
-      { value: 'not_paying', label: 'Honestly, I wasn\'t paying close attention' },
-    ],
-  },
-  {
-    id: 'unresolved',
-    type: 'single',
-    titles: [
-      'Is there anyone in your life right now with whom you feel there\'s something unresolved?',
-      'Is there a relationship right now that still feels like an open question?',
-      'When you think of the people around you, does any connection feel unfinished?',
-    ],
-    options: [
-      { value: 'yes_know', label: 'Yes, and I have a sense of who' },
-      { value: 'maybe', label: 'Maybe — I haven\'t really sat with it' },
-      { value: 'not_aware', label: 'Not that I\'m aware of' },
-      { value: 'few_people', label: 'A few people, actually' },
-    ],
-  },
-  {
-    id: 'firstInstinct',
-    type: 'single',
-    titles: [
-      'When you find out who it is — what\'s your first instinct likely to be?',
-      'Once you see the name — what do you imagine yourself doing first?',
-      'When the answer is in front of you — how do you tend to react to news like this?',
-    ],
-    options: [
-      { value: 'reach_out', label: 'Reach out and gently ask what happened' },
-      { value: 'withdraw', label: 'Step back and process it on my own' },
-      { value: 'hurt', label: 'Feel it, and wonder what part was mine' },
-      { value: 'angry', label: 'Feel a flash of frustration' },
-      { value: 'observe', label: 'Take some distance before doing anything' },
-    ],
-  },
-  {
-    id: 'commitments',
-    type: 'multiple',
-    subtitle: 'You can select multiple',
-    titles: [
-      'Before you see the name — what do you want to commit to?',
-      'Before we reveal anything — what do you want to hold onto?',
-      'Before the name appears — what kind of response do you want to choose?',
-    ],
-    options: [
-      { value: 'breathe', label: 'To take a breath before reacting' },
-      { value: 'self_reflect', label: 'To ask myself first: what was my role in this?' },
-      { value: 'remember_signal', label: 'To remember that a signal reflects a feeling, not a verdict' },
-      { value: 'be_kind', label: 'To be kind to myself, whatever I discover' },
-    ],
-  },
-];
+// Construit le pool de questions à partir des traductions courantes. Les
+// libellés restent introspectifs, doux et ouverts — un signal, pas un
+// verdict (voir la philosophie du tunnel de vente). Les `value` restent
+// indépendants de la langue pour ne pas casser l'analytics stocké en localStorage.
+function buildQuestionPool(t: Translations): QuestionTheme[] {
+  const q = t.revealGate.questions;
+  return [
+    { id: 'feeling', type: 'single', titles: q.feeling.titles, options: q.feeling.options },
+    { id: 'recentTension', type: 'single', titles: q.recentTension.titles, options: q.recentTension.options },
+    { id: 'unresolved', type: 'single', titles: q.unresolved.titles, options: q.unresolved.options },
+    { id: 'firstInstinct', type: 'single', titles: q.firstInstinct.titles, options: q.firstInstinct.options },
+    { id: 'commitments', type: 'multiple', subtitle: q.commitments.subtitle, titles: q.commitments.titles, options: q.commitments.options },
+  ];
+}
 
 // Tire une variante de titre au hasard pour chaque thème.
-function buildQuestions() {
-  return QUESTION_POOL.map((theme) => ({
+function buildQuestions(t: Translations) {
+  return buildQuestionPool(t).map((theme) => ({
     ...theme,
     title: theme.titles[Math.floor(Math.random() * theme.titles.length)],
   }));
 }
 
 export function RevealGate({ onReveal, onClose }: RevealGateProps) {
+  const { t } = useLanguage();
   // Construit le questionnaire une seule fois par montage → la sélection
   // aléatoire reste stable pendant toute la session du gate.
-  const [questions] = useState(buildQuestions);
+  const [questions] = useState(() => buildQuestions(t));
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<RevealAnswers>({});
   const [showTransition, setShowTransition] = useState(false);
@@ -202,7 +138,7 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
             transition={{ delay: 0.6 }}
             className="text-3xl md:text-4xl font-display font-black text-white mb-6"
           >
-            You've taken a moment for yourself.
+            {t.revealGate.transition.title}
           </motion.h2>
 
           <motion.p
@@ -211,7 +147,7 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
             transition={{ delay: 0.8 }}
             className="text-xl text-gray-400 mb-4"
           >
-            That already makes you different from most people.
+            {t.revealGate.transition.subtitle}
           </motion.p>
 
           <motion.p
@@ -220,7 +156,7 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
             transition={{ delay: 1 }}
             className="text-lg text-gray-500 mb-12 max-w-xl mx-auto"
           >
-            What you're about to see is just a signal — not a verdict. How you respond to it will say more about you than it says about them.
+            {t.revealGate.transition.body}
           </motion.p>
 
           <motion.button
@@ -236,7 +172,7 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
             }}
             className="px-8 py-4 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold text-lg hover:shadow-[0_0_30px_rgba(34,197,94,0.4)] transition-all duration-300 flex items-center gap-3 mx-auto"
           >
-            View Accounts
+            {t.revealGate.viewAccounts}
             <ArrowRight className="w-5 h-5" />
           </motion.button>
         </motion.div>
@@ -254,13 +190,13 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-bold text-gray-500">
-              Question {currentQuestion + 1} of {questions.length}
+              {interpolate(t.revealGate.progressLabel, { current: currentQuestion + 1, total: questions.length })}
             </span>
             <button
               onClick={onClose}
               className="text-sm text-gray-500 hover:text-white transition-colors"
             >
-              Cancel
+              {t.revealGate.cancel}
             </button>
           </div>
           <div className="h-1 bg-white/10 rounded-full overflow-hidden">
@@ -337,7 +273,7 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
                   onClick={handleBack}
                   className="px-6 py-3 rounded-full text-gray-400 hover:text-white transition-colors font-bold"
                 >
-                  Back
+                  {t.revealGate.back}
                 </button>
               )}
               <button
@@ -349,7 +285,7 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
                     : 'bg-white/10 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {isLastQuestion ? 'Continue' : 'Next'}
+                {isLastQuestion ? t.revealGate.continueLabel : t.revealGate.next}
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

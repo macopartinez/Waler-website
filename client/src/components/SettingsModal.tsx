@@ -5,6 +5,7 @@ import { useAccounts, useDeleteAccount, type InstagramAccount } from "@/hooks/us
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { maxAccountsForTier, maxAccountsLabel } from "@shared/accounts";
 import { fallbackAvatar } from "@/lib/utils";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose, onLogout, user, onClearData }: SettingsModalProps) {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'account' | 'display' | 'data'>('account');
   const [disableAnimation, setDisableAnimation] = useState(() => {
     return localStorage.getItem('disableBackgroundAnimation') === 'true';
@@ -33,9 +35,9 @@ export function SettingsModal({ isOpen, onClose, onLogout, user, onClearData }: 
   }, [disableAnimation]);
 
   const tabs = [
-    { id: 'account', label: 'Account', icon: User },
-    { id: 'display', label: 'Display', icon: Monitor },
-    ...(onClearData ? [{ id: 'data', label: 'Data', icon: Database }] : []),
+    { id: 'account', label: t.settingsModal.tabs.account, icon: User },
+    { id: 'display', label: t.settingsModal.tabs.display, icon: Monitor },
+    ...(onClearData ? [{ id: 'data', label: t.settingsModal.tabs.data, icon: Database }] : []),
   ];
 
   return (
@@ -67,7 +69,7 @@ export function SettingsModal({ isOpen, onClose, onLogout, user, onClearData }: 
                   <div className="w-10 h-10 rounded-xl bg-[#02c950]/10 border border-[#02c950]/30 flex items-center justify-center">
                     <Settings className="w-5 h-5 text-[#02c950]" />
                   </div>
-                  <h2 className="text-2xl font-bold text-white">Settings</h2>
+                  <h2 className="text-2xl font-bold text-white">{t.settingsModal.title}</h2>
                 </div>
                 <button
                   onClick={onClose}
@@ -100,11 +102,11 @@ export function SettingsModal({ isOpen, onClose, onLogout, user, onClearData }: 
                 {activeTab === 'account' && (
                   <div className="space-y-6">
                     <div>
-                      <h3 className="text-lg font-bold text-white mb-4">Account Information</h3>
+                      <h3 className="text-lg font-bold text-white mb-4">{t.settingsModal.account.heading}</h3>
                       <div className="space-y-4">
                         <div className="bg-white/5 rounded-xl p-4">
-                          <label className="text-sm text-gray-400 block mb-1">Email</label>
-                          <p className="text-white font-medium">{user.email || 'Not set'}</p>
+                          <label className="text-sm text-gray-400 block mb-1">{t.settingsModal.account.emailLabel}</label>
+                          <p className="text-white font-medium">{user.email || t.settingsModal.account.notSet}</p>
                         </div>
                       </div>
                     </div>
@@ -117,7 +119,7 @@ export function SettingsModal({ isOpen, onClose, onLogout, user, onClearData }: 
                         className="w-full px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-medium transition-colors flex items-center justify-center gap-2"
                       >
                         <LogOut className="w-4 h-4" />
-                        Logout
+                        {t.settingsModal.account.logout}
                       </button>
                     </div>
                   </div>
@@ -125,12 +127,12 @@ export function SettingsModal({ isOpen, onClose, onLogout, user, onClearData }: 
 
                 {activeTab === 'display' && (
                   <div className="space-y-6">
-                    <h3 className="text-lg font-bold text-white mb-4">Display Settings</h3>
+                    <h3 className="text-lg font-bold text-white mb-4">{t.settingsModal.display.heading}</h3>
                     <div className="space-y-4">
                       <div className="flex items-center justify-between bg-white/5 rounded-xl p-4">
                         <div>
-                          <p className="text-white font-medium">Disable background animation</p>
-                          <p className="text-sm text-gray-400">Turn off animated background for better performance</p>
+                          <p className="text-white font-medium">{t.settingsModal.display.disableAnimTitle}</p>
+                          <p className="text-sm text-gray-400">{t.settingsModal.display.disableAnimDesc}</p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
@@ -148,14 +150,14 @@ export function SettingsModal({ isOpen, onClose, onLogout, user, onClearData }: 
 
                 {activeTab === 'data' && onClearData && (
                   <div className="space-y-6">
-                    <h3 className="text-lg font-bold text-white mb-4">Data Management</h3>
+                    <h3 className="text-lg font-bold text-white mb-4">{t.settingsModal.data.heading}</h3>
                     <div className="space-y-4">
                       <div className="bg-white/5 rounded-xl p-4">
-                        <p className="text-white font-medium mb-2">Clear Local Data</p>
-                        <p className="text-sm text-gray-400 mb-4">Delete all people and settings stored locally. This cannot be undone.</p>
+                        <p className="text-white font-medium mb-2">{t.settingsModal.data.clearTitle}</p>
+                        <p className="text-sm text-gray-400 mb-4">{t.settingsModal.data.clearDesc}</p>
                         <button
                           onClick={() => {
-                            if (confirm('Are you sure you want to clear all local data? This cannot be undone.')) {
+                            if (confirm(t.settingsModal.data.clearConfirm)) {
                               localStorage.removeItem('pro-people');
                               localStorage.removeItem('pro-connections');
                               localStorage.removeItem('pro-prospects');
@@ -166,7 +168,7 @@ export function SettingsModal({ isOpen, onClose, onLogout, user, onClearData }: 
                           className="w-full px-4 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 font-medium transition-colors flex items-center justify-center gap-2"
                         >
                           <Trash2 className="w-4 h-4" />
-                          Clear All Data
+                          {t.settingsModal.data.clearButton}
                         </button>
                       </div>
                     </div>
@@ -187,6 +189,7 @@ export function SettingsModal({ isOpen, onClose, onLogout, user, onClearData }: 
  * et suppression d'un compte lié. Toutes les actions sont fonctionnelles (API).
  */
 function AccountsManager() {
+  const { t } = useLanguage();
   const { data, isLoading } = useAccounts();
   const { tier } = useSubscription();
   const deleteAccount = useDeleteAccount();
@@ -196,7 +199,7 @@ function AccountsManager() {
   if (isLoading || !data) {
     return (
       <div className="pt-4 border-t border-white/10 flex items-center gap-2 text-sm text-gray-500">
-        <Loader2 className="w-4 h-4 animate-spin" /> Loading accounts…
+        <Loader2 className="w-4 h-4 animate-spin" /> {t.settingsModal.account.loadingAccounts}
       </div>
     );
   }
@@ -207,13 +210,13 @@ function AccountsManager() {
   const atLimit = accounts.length >= max;
 
   const handleDelete = async (a: InstagramAccount) => {
-    if (!confirm(`Delete @${a.username}?\n\nAll data for this account (followers, unfollowers…) will be permanently deleted. This action cannot be undone.`)) return;
+    if (!confirm(interpolate(t.settingsModal.account.deleteConfirm, { username: a.username }))) return;
     setError(null);
     setBusyId(a.id);
     try {
       await deleteAccount.mutateAsync(a.id);
     } catch (e: any) {
-      setError(e.message || "Failed to delete account");
+      setError(e.message || t.settingsModal.account.deleteError);
     } finally {
       setBusyId(null);
     }
@@ -222,7 +225,7 @@ function AccountsManager() {
   return (
     <div className="pt-4 border-t border-white/10">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-white">Instagram accounts</h3>
+        <h3 className="text-lg font-bold text-white">{t.settingsModal.account.accountsHeading}</h3>
         <span
           className={`text-sm font-semibold px-2.5 py-1 rounded-lg border ${
             atLimit
@@ -252,16 +255,16 @@ function AccountsManager() {
                   <span className="text-sm font-semibold text-white truncate">@{a.username}</span>
                   {isPrimary ? (
                     <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#02c950] bg-[#02c950]/10 border border-[#02c950]/30 px-1.5 py-0.5 rounded">
-                      <Crown className="w-3 h-3" /> Primary
+                      <Crown className="w-3 h-3" /> {t.settingsModal.account.primary}
                     </span>
                   ) : (
                     <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
-                      Linked
+                      {t.settingsModal.account.linked}
                     </span>
                   )}
                 </div>
                 <div className="text-[11px] text-gray-500">
-                  {typeof a.followersCount === "number" ? `${a.followersCount} followers` : "—"}
+                  {typeof a.followersCount === "number" ? interpolate(t.settingsModal.account.followersCount, { count: a.followersCount }) : t.settingsModal.account.noData}
                 </div>
               </div>
 
@@ -271,7 +274,7 @@ function AccountsManager() {
                 !isPrimary && (
                   <button
                     onClick={() => handleDelete(a)}
-                    title="Delete this account"
+                    title={t.settingsModal.account.deleteTooltip}
                     className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -285,7 +288,7 @@ function AccountsManager() {
 
       {atLimit && max !== Infinity && (
         <p className="mt-3 text-xs text-gray-500">
-          Plan limit reached. Upgrade to the Pro plan to track unlimited accounts.
+          {t.settingsModal.account.limitReached}
         </p>
       )}
     </div>

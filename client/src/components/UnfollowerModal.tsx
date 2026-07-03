@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ExternalLink, AlertCircle, Heart, User } from "lucide-react";
 import { useState } from "react";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 
 interface UnfollowerModalProps {
   unfollower: {
@@ -17,6 +18,7 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
   const [selectedOption, setSelectedOption] = useState<"unfollow" | "blocked" | null>(null);
   const [showPsychologyMessage, setShowPsychologyMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { t } = useLanguage();
 
   const instagramUrl = `https://www.instagram.com/${unfollower.username}`;
   const formattedDate = new Date(unfollower.detectedAt).toLocaleDateString('en-US', {
@@ -44,7 +46,7 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
         onClose();
       } catch (error) {
         console.error("Error marking as blocker:", error);
-        alert("Failed to mark as blocker. Please try again.");
+        alert(t.unfollowerModal.markBlockerFailed);
       } finally {
         setIsSubmitting(false);
       }
@@ -65,7 +67,7 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
         {/* Header */}
         <div className="bg-gradient-to-r from-amber-500/20 to-red-500/20 border-b border-amber-500/30 p-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-white">Unfollower Details</h2>
+            <h2 className="text-xl font-bold text-white">{t.unfollowerModal.title}</h2>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-white transition-colors"
@@ -88,7 +90,7 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-bold text-white">@{unfollower.username}</h3>
-              <p className="text-sm text-gray-400">Unfollowed on {formattedDate}</p>
+              <p className="text-sm text-gray-400">{interpolate(t.unfollowerModal.unfollowedOn, { date: formattedDate })}</p>
             </div>
           </div>
 
@@ -100,12 +102,12 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
             className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-xl text-green-300 hover:bg-green-500/30 transition-all"
           >
             <ExternalLink className="w-5 h-5" />
-            <span className="font-medium">View on Instagram</span>
+            <span className="font-medium">{t.unfollowerModal.viewOnInstagram}</span>
           </a>
 
           <div className="border-t border-white/10 pt-4">
             <p className="text-sm text-gray-400 mb-4">
-              Check their profile, then come back and tell us:
+              {t.unfollowerModal.checkProfile}
             </p>
 
             {/* Options */}
@@ -125,8 +127,8 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
                     {selectedOption === "unfollow" && <div className="w-2 h-2 bg-white rounded-full" />}
                   </div>
                   <div>
-                    <p className="font-semibold">They just unfollowed</p>
-                    <p className="text-xs text-gray-400">Account is still visible</p>
+                    <p className="font-semibold">{t.unfollowerModal.optionUnfollowTitle}</p>
+                    <p className="text-xs text-gray-400">{t.unfollowerModal.optionUnfollowDesc}</p>
                   </div>
                 </div>
               </button>
@@ -146,8 +148,8 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
                     {selectedOption === "blocked" && <div className="w-2 h-2 bg-white rounded-full" />}
                   </div>
                   <div>
-                    <p className="font-semibold">They blocked me 🚫</p>
-                    <p className="text-xs text-gray-400">Profile not found or restricted</p>
+                    <p className="font-semibold">{t.unfollowerModal.optionBlockedTitle}</p>
+                    <p className="text-xs text-gray-400">{t.unfollowerModal.optionBlockedDesc}</p>
                   </div>
                 </div>
               </button>
@@ -166,16 +168,15 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-orange-400 mt-0.5 flex-shrink-0" />
                   <div className="space-y-2 text-sm text-gray-300">
-                    <p className="font-semibold text-orange-300">💭 A moment of reflection</p>
+                    <p className="font-semibold text-orange-300">{t.unfollowerModal.reflectionTitle}</p>
                     <p>
-                      Being blocked can feel painful, but remember: <strong className="text-white">it's not about your worth</strong>.
+                      {t.unfollowerModal.reflectionBody1Prefix} <strong className="text-white">{t.unfollowerModal.reflectionBody1Highlight}</strong>{t.unfollowerModal.reflectionBody1Suffix}
                     </p>
                     <p>
-                      People block for many reasons - their own boundaries, mental health, or simply moving on. 
-                      This is an opportunity to <strong className="text-white">focus on relationships that uplift you</strong>.
+                      {t.unfollowerModal.reflectionBody2} <strong className="text-white">{t.unfollowerModal.reflectionBody2Highlight}</strong>{t.unfollowerModal.reflectionBody2Suffix}
                     </p>
                     <p className="text-orange-300 italic">
-                      "Not everyone is meant to stay in your story. That's okay." 🌱
+                      {t.unfollowerModal.reflectionQuote}
                     </p>
                   </div>
                 </div>
@@ -191,7 +192,7 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
               onClick={onClose}
               className="px-4 py-2 text-gray-300 hover:bg-white/10 rounded-lg transition-colors"
             >
-              Cancel
+              {t.unfollowerModal.cancel}
             </button>
             <button
               onClick={handleConfirm}
@@ -202,7 +203,7 @@ export default function UnfollowerModal({ unfollower, onClose, onMarkAsBlocker }
                   : "bg-gray-600 text-gray-400 cursor-not-allowed"
               }`}
             >
-              {isSubmitting ? "Saving..." : "Confirm"}
+              {isSubmitting ? t.unfollowerModal.saving : t.unfollowerModal.confirm}
             </button>
           </div>
         </div>

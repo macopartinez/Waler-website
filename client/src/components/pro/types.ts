@@ -10,12 +10,25 @@ export type Temperature = 'hot' | 'warm' | 'cold';
 // Phase de « setting » (qualification en DM) déduite du contenu des messages.
 export type SettingPhase = 'connexion' | 'situation' | 'probleme' | 'transition';
 
+// Le libellé par défaut (EN) reste exporté pour compat, mais les appelants
+// doivent préférer `t.personBadges.settingPhases` (i18n) via `getSettingPhaseLabel`.
 export const SETTING_PHASE_LABELS: Record<SettingPhase, string> = {
   connexion: 'Connection',
   situation: 'Situation',
   probleme: 'Problem',
   transition: 'Transition (call)',
 };
+
+export interface SettingPhaseLabels {
+  connexion: string;
+  situation: string;
+  probleme: string;
+  transition: string;
+}
+
+export function getSettingPhaseLabel(phase: SettingPhase, labels: SettingPhaseLabels): string {
+  return labels[phase];
+}
 
 // Faits clés extraits des messages du prospect (best-effort, côté extension).
 export interface ConversationFacts {
@@ -131,17 +144,28 @@ export function getEffectiveTemperature(person: Person): Temperature | undefined
   }
 }
 
+export interface BadgeLabels {
+  hot: string;
+  warm: string;
+  cold: string;
+  converted: string;
+  lost: string;
+  vip: string;
+  keep: string;
+  watch: string;
+}
+
 // Badge « ressenti » unique (axe relation vivante : chaud/tiède/froid).
-export function getTemperatureBadge(person: Person): { label: string; color: string; icon: string } | null {
+export function getTemperatureBadge(person: Person, labels: BadgeLabels): { label: string; color: string; icon: string } | null {
   const t = getEffectiveTemperature(person);
   if (!t) return null;
   switch (t) {
     case 'hot':
-      return { label: 'Hot', color: 'text-red-400 bg-red-500/20 border-red-500/30', icon: 'Flame' };
+      return { label: labels.hot, color: 'text-red-400 bg-red-500/20 border-red-500/30', icon: 'Flame' };
     case 'warm':
-      return { label: 'Warm', color: 'text-orange-400 bg-orange-500/20 border-orange-500/30', icon: 'Thermometer' };
+      return { label: labels.warm, color: 'text-orange-400 bg-orange-500/20 border-orange-500/30', icon: 'Thermometer' };
     case 'cold':
-      return { label: 'Cold', color: 'text-blue-400 bg-blue-500/20 border-blue-500/30', icon: 'Snowflake' };
+      return { label: labels.cold, color: 'text-blue-400 bg-blue-500/20 border-blue-500/30', icon: 'Snowflake' };
   }
 }
 
@@ -188,53 +212,53 @@ export function isInCircle(person: Person): boolean {
   return hasTag(person, 'vip') || hasTag(person, 'keep') || hasTag(person, 'watch');
 }
 
-export function getProspectBadge(person: Person): { label: string; color: string; icon: string } | null {
+export function getProspectBadge(person: Person, labels: BadgeLabels): { label: string; color: string; icon: string } | null {
   if (!isProspect(person) || !person.prospectStatus) return null;
   
   switch (person.prospectStatus) {
     case 'hot':
-      return { label: 'Hot', color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Flame' };
+      return { label: labels.hot, color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Flame' };
     case 'warm':
-      return { label: 'Warm', color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Thermometer' };
+      return { label: labels.warm, color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Thermometer' };
     case 'cold':
-      return { label: 'Cold', color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Snowflake' };
+      return { label: labels.cold, color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Snowflake' };
     case 'converted':
-      return { label: 'Converted', color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'CheckCircle' };
+      return { label: labels.converted, color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'CheckCircle' };
     case 'lost':
-      return { label: 'Lost', color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'AlertCircle' };
+      return { label: labels.lost, color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'AlertCircle' };
   }
 }
 
-export function getCircleBadge(person: Person): { label: string; color: string; icon: string } | null {
+export function getCircleBadge(person: Person, labels: BadgeLabels): { label: string; color: string; icon: string } | null {
   if (!person.circle) return null;
   
   switch (person.circle) {
     case 'vip':
-      return { label: 'VIP', color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Crown' };
+      return { label: labels.vip, color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Crown' };
     case 'keep':
-      return { label: 'To keep', color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Star' };
+      return { label: labels.keep, color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Star' };
     case 'watch':
-      return { label: 'To watch', color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Eye' };
+      return { label: labels.watch, color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'Eye' };
   }
 }
 
-export function getDisplayBadges(person: Person): Array<{ label: string; color: string; icon: string }> {
+export function getDisplayBadges(person: Person, labels: BadgeLabels): Array<{ label: string; color: string; icon: string }> {
   const badges = [];
 
   // Ressenti unique (température calculée, repli sur statut manuel) : signal d'action.
   // On n'affiche plus le badge prospect cold/warm/hot en doublon — il faisait apparaître
   // deux statuts contradictoires (ex. « Froid » manuel vs « Chaud » calculé).
-  const temperatureBadge = getTemperatureBadge(person);
+  const temperatureBadge = getTemperatureBadge(person, labels);
   if (temperatureBadge) badges.push(temperatureBadge);
 
   // Seuls les états terminaux du prospect (sans équivalent température) restent affichés.
   if (isProspect(person) && (person.prospectStatus === 'converted' || person.prospectStatus === 'lost')) {
     badges.push(person.prospectStatus === 'converted'
-      ? { label: 'Converted', color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'CheckCircle' }
-      : { label: 'Lost', color: 'text-gray-400 bg-gray-500/20 border-gray-500/30', icon: 'AlertCircle' });
+      ? { label: labels.converted, color: 'text-green-400 bg-green-500/20 border-green-500/30', icon: 'CheckCircle' }
+      : { label: labels.lost, color: 'text-gray-400 bg-gray-500/20 border-gray-500/30', icon: 'AlertCircle' });
   }
 
-  const circleBadge = getCircleBadge(person);
+  const circleBadge = getCircleBadge(person, labels);
   if (circleBadge) badges.push(circleBadge);
 
   return badges;

@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ChevronRight, ChevronLeft, Check, Target, FileText, Sparkles, Crown, Star, Eye, Flame, Thermometer, Activity, Heart } from "lucide-react";
 import { useState } from "react";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 
 // Clé localStorage versionnée : on incrémente la version quand le contenu du
 // tutoriel change significativement, afin qu'il se ré-affiche UNE seule fois
@@ -21,137 +22,16 @@ type TutorialStep = {
   image?: string;
 };
 
-const tutorialSteps: TutorialStep[] = [
-  {
-    title: "Welcome to Pro Mode",
-    description: "Manage your professional network like an expert",
-    icon: Crown,
-    details: [
-      "Manage your prospects and your inner circle of contacts in the People view",
-      "Track every relationship with advanced metrics",
-      "Automatic profile analysis powered by our AI agents",
-      "Export your notes and reports to PDF"
-    ],
-    tip: "Start by adding your first people to unlock the full power of Pro Mode!"
-  },
-  {
-    title: "The People Network — Overview",
-    description: "The heart of relationship tracking: prospects and key contacts",
-    icon: Target,
-    details: [
-      "Switch to the People view to see all your relationships as cards",
-      "Two families: Prospects (to convert) and Circle (to nurture)",
-      "Each card sums up the essentials: score, sentiment, connection status and latest signal",
-      "A colored border shows the sentiment (red = hot, orange = warm, blue = cold)",
-      "Click a card to open the detailed profile and all its stats"
-    ],
-    tip: "The People view reads at a glance: spot the red borders first — those are today's priorities."
-  },
-  {
-    title: "Prospects — Convert Your Leads",
-    description: "Turn your prospects into clients",
-    icon: Flame,
-    details: [
-      "Hot status 🔥: highly engaged prospect, ready to convert — reach out now",
-      "Warm status 🌡️: interested prospect, keep nurturing and following up regularly",
-      "Cold status ❄️: prospect to warm up gradually with value",
-      "The Score /100 sums up the potential: ≥75 hot, 50-74 warm, <50 cold",
-      "\"Mark as converted\" in one click when a prospect becomes a client"
-    ],
-    tip: "A hot prospect who follows you back is more likely to convert quickly — make them a priority."
-  },
-  {
-    title: "Circle — Your Key Contacts",
-    description: "Keep your most important relationships at the right level",
-    icon: Star,
-    details: [
-      "VIP 👑: your most important contacts — instant alerts (max 10)",
-      "To keep ⭐: valuable contacts to nurture — weekly alert (max 50)",
-      "To watch 👁️: contacts to keep an eye on — monthly report (max 100)",
-      "The Relationship Score /100 measures how strong the relationship is",
-      "Move a contact between circles anytime from their detailed profile"
-    ],
-    tip: "Watch the Relationship Score: if it drops below 50, that's the cooling-off signal — re-engage the relationship."
-  },
-  {
-    title: "Understanding People Stats",
-    description: "Decode every number on a person's profile",
-    icon: Activity,
-    details: [
-      "Score / Sentiment: potential (prospect) or strength (circle) + Hot/Warm/Cold temperature",
-      "Connection status: Mutual, Follows you, You follow or None — the basis of every relationship",
-      "Connection length: how many days the link has existed (longer duration boosts the score)",
-      "Mutual connections: friends in common, useful to gauge closeness and credibility",
-      "Detected signals: total number of captured events (likes, comments, follow/unfollow)"
-    ],
-    tip: "A \"Mutual\" status + a long duration + mutual connections = a strong, high-value relationship."
-  },
-  {
-    title: "Conversation Dynamics & Setting",
-    description: "Measure the real quality of your DM exchanges",
-    icon: Thermometer,
-    details: [
-      "Response time (theirs / yours): a growing delay = dropping interest",
-      "Response rate & short replies: a high rate of short replies = low engagement",
-      "Cadence: whether the exchange frequency is rising ↗, falling ↘ or holding steady",
-      "\"Seen, no reply\" alerts you when your last message went unanswered",
-      "Setting / qualification: what the prospect revealed (Goal, Situation, Pain, Budget, Timing)"
-    ],
-    tip: "Follow the \"Next step\" suggested by the Setting: it's the most useful action to take right now to move forward."
-  },
-  {
-    title: "Timeline & Relationship Evolution",
-    description: "Visualize the history of interactions over time",
-    icon: Heart,
-    details: [
-      "Interaction timeline: every like ❤️ and comment 💬 on your posts",
-      "The streak (continuous line) shows consistency — a \"break\" flags posts with no interaction",
-      "Filter the timeline by Likes or Comments to target one type of engagement",
-      "Relationship evolution: follow, unfollow, ghost and refollow, timestamped",
-      "Click \"View post →\" to find the relevant post back on Instagram"
-    ],
-    tip: "A recent break in a VIP's streak is a warning sign: that's often where a relationship starts cooling off."
-  },
-  {
-    title: "Automatic Analysis by Agents",
-    description: "AI analyzes profiles for you",
-    icon: Sparkles,
-    details: [
-      "When you add a person, our agents analyze the profile",
-      "Automatic extraction: followers, following, posts, bio",
-      "Detection of the account's private/public status",
-      "Real-time updates with a progress overlay",
-      "Enriched data for better scoring"
-    ],
-    tip: "The agents analyze the profile in real time — you'll see an overlay during the process, just wait a few seconds."
-  },
-  {
-    title: "Notes and PDF Export",
-    description: "Document and share your insights",
-    icon: FileText,
-    details: [
-      "Take detailed notes for every person",
-      "Add clickable links inside your notes",
-      "Highlight key passages in color",
-      "Export everything to a professional PDF in one click"
-    ],
-    tip: "Export a person's profile to PDF to create a pro report with their stats, timeline and your notes."
-  },
-  {
-    title: "Filters and Search",
-    description: "Find what you're looking for fast",
-    icon: Eye,
-    details: [
-      "Filter by type: All, Prospects, VIP, To keep, To watch",
-      "Filter by sentiment (Hot/Warm/Cold), combinable with the type filter",
-      "Instant search by name or username",
-      "Automatic organization by score and status"
-    ],
-    tip: "Combine the \"Prospects\" filter with the \"Hot\" sentiment to show only the leads ready to convert."
-  }
-];
+// Icônes associées à chaque étape, dans le même ordre que `proTutorial.steps`
+// dans les dictionnaires i18n (le texte est traduit, les icônes non).
+const TUTORIAL_ICONS = [Crown, Target, Flame, Star, Activity, Thermometer, Heart, Sparkles, FileText, Eye];
 
 export function ProTutorial({ isOpen, onClose }: ProTutorialProps) {
+  const { t } = useLanguage();
+  const tutorialSteps: TutorialStep[] = t.proTutorial.steps.map((s, i) => ({
+    ...s,
+    icon: TUTORIAL_ICONS[i],
+  }));
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
 
@@ -215,8 +95,8 @@ export function ProTutorial({ isOpen, onClose }: ProTutorialProps) {
                       <Crown className="w-6 h-6 text-green-400" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-display font-black text-white">Pro Mode Guide</h2>
-                      <p className="text-sm text-gray-400">Master every feature</p>
+                      <h2 className="text-xl font-display font-black text-white">{t.proTutorial.headerTitle}</h2>
+                      <p className="text-sm text-gray-400">{t.proTutorial.headerSubtitle}</p>
                     </div>
                   </div>
                   <button
@@ -237,8 +117,8 @@ export function ProTutorial({ isOpen, onClose }: ProTutorialProps) {
                   />
                 </div>
                 <div className="flex justify-between mt-2 text-xs text-gray-400">
-                  <span>Step {currentStep + 1} of {tutorialSteps.length}</span>
-                  <span>{Math.round(progress)}% complete</span>
+                  <span>{interpolate(t.proTutorial.stepLabel, { current: currentStep + 1, total: tutorialSteps.length })}</span>
+                  <span>{interpolate(t.proTutorial.percentComplete, { percent: Math.round(progress) })}</span>
                 </div>
               </div>
 
@@ -246,7 +126,7 @@ export function ProTutorial({ isOpen, onClose }: ProTutorialProps) {
               <div className="flex h-[calc(90vh-200px)]">
                 {/* Step Navigation Sidebar */}
                 <div className="w-56 border-r border-green-500/20 bg-black/30 p-3 overflow-y-auto">
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Chapters</h3>
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{t.proTutorial.chapters}</h3>
                   <div className="space-y-2">
                     {tutorialSteps.map((s, index) => {
                       const StepIcon = s.icon;
@@ -323,7 +203,7 @@ export function ProTutorial({ isOpen, onClose }: ProTutorialProps) {
                         <div className="flex items-start gap-3">
                           <Sparkles className="w-5 h-5 text-green-400 flex-shrink-0 mt-1" />
                           <div>
-                            <h4 className="font-semibold text-white mb-2">💡 Pro Tip</h4>
+                            <h4 className="font-semibold text-white mb-2">{t.proTutorial.proTip}</h4>
                             <p className="text-sm text-gray-300">{step.tip}</p>
                           </div>
                         </div>
@@ -342,7 +222,7 @@ export function ProTutorial({ isOpen, onClose }: ProTutorialProps) {
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <ChevronLeft className="w-5 h-5" />
-                    Previous
+                    {t.proTutorial.previous}
                   </button>
 
                   <div className="flex gap-2">
@@ -367,14 +247,14 @@ export function ProTutorial({ isOpen, onClose }: ProTutorialProps) {
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all"
                     >
                       <Check className="w-5 h-5" />
-                      Finish
+                      {t.proTutorial.finish}
                     </button>
                   ) : (
                     <button
                       onClick={handleNext}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all"
                     >
-                      Next
+                      {t.proTutorial.next}
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   )}

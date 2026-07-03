@@ -12,6 +12,7 @@ import { ProTutorial, PRO_TUTORIAL_STORAGE_KEY } from "./ProTutorial";
 import { Person, PersonTag, ProspectStatus, Circle, AnalysisStatus, Temperature, isProspect, isInCircle, temperatureRank, getEffectiveTemperature } from "./types";
 import { exportPeopleSummaryToPDF } from "../../utils/pdfExport";
 import type { InstagramAccount } from "@/hooks/use-accounts";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 
 interface ProDashboardProps {
   /** Comptes Instagram du login (owner + comptes liés). */
@@ -23,6 +24,7 @@ interface ProDashboardProps {
 }
 
 export function ProDashboard({ accounts, activeAccountId, onAccountChange }: ProDashboardProps) {
+  const { t } = useLanguage();
   const { user: authUser, logout } = useAuth();
   // Filtre de compte de la vue People : 'all' = tous les comptes, sinon l'id.
   const [peopleAccountFilter, setPeopleAccountFilter] = useState<number | 'all'>(activeAccountId ?? 'all');
@@ -794,9 +796,9 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
           {/* Header + actions principales (alignées à droite) */}
           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-4xl font-display font-black mb-2">People Network</h1>
+              <h1 className="text-4xl font-display font-black mb-2">{t.proDashboard.header.title}</h1>
               <p className="text-gray-400">
-                Manage your prospects and connections in one place
+                {t.proDashboard.header.subtitle}
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -805,16 +807,16 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                 className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all"
               >
                 <UserPlus className="w-5 h-5" />
-                Add Person
+                {t.proDashboard.header.addPerson}
               </button>
               {people.length > 0 && (
                 <button
                   onClick={handleExportPeopleSummary}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-white font-bold hover:bg-white/10 transition-all"
-                  title="Export a global summary of your network to PDF"
+                  title={t.proDashboard.header.exportPdfTooltip}
                 >
                   <Download className="w-5 h-5" />
-                  Export PDF
+                  {t.proDashboard.header.exportPdf}
                 </button>
               )}
             </div>
@@ -828,7 +830,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                       <Network className="w-5 h-5 text-purple-300" />
                     </div>
                     <span className="text-sm text-gray-300 font-semibold">
-                      {activeFilter === 'all' ? 'Total People' : 'Filtered'}
+                      {activeFilter === 'all' ? t.proDashboard.stats.totalPeople : t.proDashboard.stats.filtered}
                     </span>
                   </div>
                   <p className="text-4xl font-black text-white">{stats.totalPeople}</p>
@@ -839,11 +841,11 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     <div className="w-10 h-10 rounded-xl bg-green-500/30 flex items-center justify-center">
                       <Target className="w-5 h-5 text-green-300" />
                     </div>
-                    <span className="text-sm text-gray-300 font-semibold">Prospects</span>
+                    <span className="text-sm text-gray-300 font-semibold">{t.proDashboard.stats.prospects}</span>
                   </div>
                   <p className="text-4xl font-black text-white">{stats.prospects}</p>
                   <span className="text-xs text-gray-400">
-                    {stats.convertedPeople} converted ({stats.conversionRate}%)
+                    {interpolate(t.proDashboard.stats.convertedSuffix, { count: stats.convertedPeople, rate: stats.conversionRate })}
                   </span>
                 </div>
 
@@ -852,10 +854,10 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     <div className="w-10 h-10 rounded-xl bg-yellow-500/30 flex items-center justify-center">
                       <Award className="w-5 h-5 text-yellow-300" />
                     </div>
-                    <span className="text-sm text-gray-300 font-semibold">VIP Circle</span>
+                    <span className="text-sm text-gray-300 font-semibold">{t.proDashboard.stats.vipCircle}</span>
                   </div>
                   <p className="text-4xl font-black text-white">{stats.vipPeople}</p>
-                  <span className="text-xs text-gray-400">Max 10</span>
+                  <span className="text-xs text-gray-400">{t.proDashboard.stats.max10}</span>
                 </div>
 
                 <div className="bg-black/80 backdrop-blur-sm bg-gradient-to-br from-blue-500/20 to-blue-500/10 border-2 border-blue-500/30 rounded-2xl p-6 shadow-lg">
@@ -863,10 +865,10 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     <div className="w-10 h-10 rounded-xl bg-blue-500/30 flex items-center justify-center">
                       <TrendingUp className="w-5 h-5 text-blue-300" />
                     </div>
-                    <span className="text-sm text-gray-300 font-semibold">Avg Health</span>
+                    <span className="text-sm text-gray-300 font-semibold">{t.proDashboard.stats.avgHealth}</span>
                   </div>
                   <p className="text-4xl font-black text-white">{stats.avgHealthScore}/100</p>
-                  <span className="text-xs text-gray-400">Network quality</span>
+                  <span className="text-xs text-gray-400">{t.proDashboard.stats.networkQuality}</span>
                 </div>
           </div>
 
@@ -879,7 +881,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search people by name, username, or sector..."
+                placeholder={t.proDashboard.search.placeholder}
                 className="w-full pl-12 pr-4 py-3 rounded-xl bg-black/60 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-green-500 transition-colors"
               />
             </div>
@@ -890,7 +892,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                 {accounts.length > 1 && (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[11px] uppercase tracking-wider text-gray-500 font-bold mr-1">
-                Account
+                {t.proDashboard.filters.accountLabel}
               </span>
               <button
                 onClick={() => setPeopleAccountFilter('all')}
@@ -900,7 +902,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     : 'bg-black/80 backdrop-blur-sm text-gray-400 border border-white/10 hover:bg-black/90'
                 }`}
               >
-                All accounts ({people.length})
+                {interpolate(t.proDashboard.filters.allAccounts, { count: people.length })}
               </button>
               {accounts.map((a) => {
                 const isActive = peopleAccountFilter === a.id;
@@ -932,7 +934,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
 
                 {/* Filtres par type */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] uppercase tracking-wider text-gray-500 font-bold mr-1">Type</span>
+                  <span className="text-[11px] uppercase tracking-wider text-gray-500 font-bold mr-1">{t.proDashboard.filters.typeLabel}</span>
               <button
                 onClick={() => setActiveFilter('all')}
                 className={`px-4 py-2 rounded-xl font-medium transition-all ${
@@ -941,7 +943,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     : 'bg-black/80 backdrop-blur-sm text-gray-400 hover:bg-black/90'
                 }`}
               >
-                <Target className="w-4 h-4 text-green-400" /> All ({accountPeople.length})
+                <Target className="w-4 h-4 text-green-400" /> {t.proDashboard.filters.all} ({accountPeople.length})
               </button>
               <button
                 onClick={() => setActiveFilter('prospect')}
@@ -951,7 +953,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     : 'bg-black/80 backdrop-blur-sm text-gray-400 hover:bg-black/90'
                 }`}
               >
-                <Target className="w-4 h-4 text-green-400" /> Prospects ({accountPeople.filter(p => p.tags.includes('prospect')).length})
+                <Target className="w-4 h-4 text-green-400" /> {t.proDashboard.filters.prospectsFilter} ({accountPeople.filter(p => p.tags.includes('prospect')).length})
               </button>
               <button
                 onClick={() => setActiveFilter('vip')}
@@ -961,7 +963,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     : 'bg-black/80 backdrop-blur-sm text-gray-400 hover:bg-black/90'
                 }`}
               >
-                <Crown className="w-4 h-4 text-green-400" /> VIP ({accountPeople.filter(p => p.tags.includes('vip')).length})
+                <Crown className="w-4 h-4 text-green-400" /> {t.proDashboard.filters.vip} ({accountPeople.filter(p => p.tags.includes('vip')).length})
               </button>
               <button
                 onClick={() => setActiveFilter('keep')}
@@ -971,7 +973,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     : 'bg-black/80 backdrop-blur-sm text-gray-400 hover:bg-black/90'
                 }`}
               >
-                <Star className="w-4 h-4 text-green-400" /> To keep ({accountPeople.filter(p => p.tags.includes('keep')).length})
+                <Star className="w-4 h-4 text-green-400" /> {t.proDashboard.filters.toKeep} ({accountPeople.filter(p => p.tags.includes('keep')).length})
               </button>
               <button
                 onClick={() => setActiveFilter('watch')}
@@ -981,7 +983,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     : 'bg-black/80 backdrop-blur-sm text-gray-400 hover:bg-black/90'
                 }`}
               >
-                <Eye className="w-4 h-4 text-green-400" /> To watch ({accountPeople.filter(p => p.tags.includes('watch')).length})
+                <Eye className="w-4 h-4 text-green-400" /> {t.proDashboard.filters.toWatch} ({accountPeople.filter(p => p.tags.includes('watch')).length})
               </button>
               <button
                 onClick={() => setActiveFilter('converted')}
@@ -991,18 +993,18 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     : 'bg-black/80 backdrop-blur-sm text-gray-400 hover:bg-black/90'
                 }`}
               >
-                <CheckCircle className="w-4 h-4 text-green-400" /> Converted ({accountPeople.filter(p => p.converted).length})
+                <CheckCircle className="w-4 h-4 text-green-400" /> {t.proDashboard.filters.converted} ({accountPeople.filter(p => p.converted).length})
               </button>
                 </div>
 
                 {/* Filtre par ressenti (température effective) */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] uppercase tracking-wider text-gray-500 font-bold mr-1">Sentiment</span>
+                  <span className="text-[11px] uppercase tracking-wider text-gray-500 font-bold mr-1">{t.proDashboard.filters.sentimentLabel}</span>
               {([
-                { key: 'all', label: 'All', Icon: null, cls: 'bg-white/10 text-gray-200 border-white/20' },
-                { key: 'hot', label: 'Hot', Icon: Flame, cls: 'bg-red-500/20 text-red-300 border-red-500/40' },
-                { key: 'warm', label: 'Warm', Icon: Thermometer, cls: 'bg-orange-500/20 text-orange-300 border-orange-500/40' },
-                { key: 'cold', label: 'Cold', Icon: Snowflake, cls: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
+                { key: 'all', label: t.proDashboard.filters.all, Icon: null, cls: 'bg-white/10 text-gray-200 border-white/20' },
+                { key: 'hot', label: t.proDashboard.filters.hot, Icon: Flame, cls: 'bg-red-500/20 text-red-300 border-red-500/40' },
+                { key: 'warm', label: t.proDashboard.filters.warm, Icon: Thermometer, cls: 'bg-orange-500/20 text-orange-300 border-orange-500/40' },
+                { key: 'cold', label: t.proDashboard.filters.cold, Icon: Snowflake, cls: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
               ] as const).map(({ key, label, Icon, cls }) => {
                 const count = key === 'all'
                   ? accountPeople.length
@@ -1031,8 +1033,8 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
             <div className="mb-6 bg-black/80 backdrop-blur-sm border border-green-500/30 rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="w-5 h-5 text-green-400" />
-                <h3 className="text-base font-bold text-white">People suggestions</h3>
-                <span className="text-xs text-gray-400">· accounts that engage often</span>
+                <h3 className="text-base font-bold text-white">{t.proDashboard.suggestions.title}</h3>
+                <span className="text-xs text-gray-400">{t.proDashboard.suggestions.subtitle}</span>
               </div>
               <div className="flex flex-col gap-2">
                 {accountSuggestions.map((s) => (
@@ -1043,7 +1045,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-white truncate">@{s.username}</div>
                       <div className="text-xs text-gray-400 flex items-center gap-2">
-                        Seen on {s.postsCount} post{s.postsCount > 1 ? 's' : ''}
+                        {interpolate(s.postsCount > 1 ? t.proDashboard.suggestions.seenOnPosts : t.proDashboard.suggestions.seenOnPost, { count: s.postsCount })}
                         {s.liked && <Heart className="w-3 h-3 text-red-400" />}
                         {s.commented && <MessageCircle className="w-3 h-3 text-blue-400" />}
                         {peopleAccountFilter === 'all' && s.accountUsername && (
@@ -1056,13 +1058,13 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                         onClick={() => addSuggestionToPeople(s.username, s.accountId)}
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/30 transition-colors"
                       >
-                        + Add
+                        {t.proDashboard.suggestions.add}
                       </button>
                       <button
                         onClick={() => dismissSuggestion(s.username, s.accountId)}
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-colors"
                       >
-                        Dismiss
+                        {t.proDashboard.suggestions.dismiss}
                       </button>
                     </div>
                   </div>
@@ -1082,19 +1084,19 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                   <Network className="w-10 h-10 text-gray-500" />
                 </div>
                 <h3 className="text-xl font-bold text-white mb-2">
-                  {searchQuery || activeFilter !== 'all' ? "No people found" : "No people yet"}
+                  {searchQuery || activeFilter !== 'all' ? t.proDashboard.empty.noPeopleFound : t.proDashboard.empty.noPeopleYet}
                 </h3>
                 <p className="text-gray-400 mb-6">
                   {searchQuery || activeFilter !== 'all'
-                    ? "Try adjusting your filters or search query"
-                    : "Add your first person to start building your network"}
+                    ? t.proDashboard.empty.tryAdjusting
+                    : t.proDashboard.empty.addFirstPerson}
                 </p>
                 {!searchQuery && activeFilter === 'all' && (
                   <button
                     onClick={() => setShowAddPerson(true)}
                     className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all"
                   >
-                    Add Your First Person
+                    {t.proDashboard.empty.addFirstButton}
                   </button>
                 )}
               </div>
@@ -1126,15 +1128,15 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
         <button
           onClick={() => setShowTutorial(true)}
           className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-lg hover:shadow-xl transition-all flex items-center justify-center group"
-          aria-label="Tutorial"
-          title="Open the Pro Mode guide"
+          aria-label={t.proDashboard.fab.tutorialLabel}
+          title={t.proDashboard.fab.tutorialTooltip}
         >
           <span className="text-2xl">?</span>
         </button>
         <button
           onClick={() => setShowSettings(true)}
           className="w-14 h-14 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 shadow-lg hover:shadow-xl transition-all flex items-center justify-center group"
-          aria-label="Settings"
+          aria-label={t.proDashboard.fab.settingsLabel}
         >
           <Settings className="w-6 h-6 text-white group-hover:rotate-90 transition-transform duration-300" />
         </button>

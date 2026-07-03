@@ -1,38 +1,40 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const monthData = [
-  320, 350, 340, 360, 355, 370, 365, 380, 375, 390, 
+  320, 350, 340, 360, 355, 370, 365, 380, 375, 390,
   385, 400, 395, 410, 405, 420, 415, 400, 390, 410,
   420, 410, 390, 380, 370, 390, 400, 410, 420, 415, 410
 ];
 
-const slides = [
-  { 
-    total: 66, 
-    label: 'Unfollowers',
-    color: '#EF4444',
-  },
-  { 
-    total: 42, 
-    label: 'New Followers',
-    color: '#1DB954',
-  },
-  { 
-    total: 12, 
-    label: 'Accounts Deleted',
-    color: '#F59E0B',
-  },
-  { 
-    total: 32, 
-    label: 'Blocked',
-    color: '#6B7280',
-  }
-];
-
 export function AnalyticsPreview() {
+  const { t } = useLanguage();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [selectedPlatform, setSelectedPlatform] = useState<'instagram'>('instagram');
+
+  const slides = [
+    {
+      total: 66,
+      label: t.analyticsPreview.unfollowers,
+      color: '#EF4444',
+    },
+    {
+      total: 42,
+      label: t.analyticsPreview.newFollowers,
+      color: '#1DB954',
+    },
+    {
+      total: 12,
+      label: t.analyticsPreview.accountsDeleted,
+      color: '#F59E0B',
+    },
+    {
+      total: 32,
+      label: t.analyticsPreview.blocked,
+      color: '#6B7280',
+    }
+  ];
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -110,7 +112,7 @@ export function AnalyticsPreview() {
             boxShadow: `0 0 15px ${current.color}20`
           }}
         >
-          📋 Accounts list
+          {t.analyticsPreview.accountsList}
         </button>
       </motion.div>
 
@@ -128,14 +130,14 @@ export function AnalyticsPreview() {
                   : 'bg-white/5 text-gray-400 hover:bg-white/10'
               }`}
             >
-              Instagram
+              {t.analyticsPreview.instagram}
             </button>
           </div>
         </div>
 
         <div className="flex items-baseline gap-2 mb-6">
-          <div className="text-white/30 text-[10px] font-black tracking-widest uppercase">Analytics</div>
-          <div className="text-white/10 text-[10px] font-bold">FEBRUARY 2024</div>
+          <div className="text-white/30 text-[10px] font-black tracking-widest uppercase">{t.analyticsPreview.analyticsLabel}</div>
+          <div className="text-white/10 text-[10px] font-bold">{t.analyticsPreview.month}</div>
         </div>
 
         <div className="relative h-[200px] flex items-end gap-[2px]">
@@ -164,14 +166,14 @@ export function AnalyticsPreview() {
         </div>
 
         <div className="mt-4 flex justify-between text-white/10 text-[8px] font-bold px-1">
-          <span>DAY 1</span>
-          <span>DAY 15</span>
-          <span>DAY 31</span>
+          <span>{t.analyticsPreview.day1}</span>
+          <span>{t.analyticsPreview.day15}</span>
+          <span>{t.analyticsPreview.day31}</span>
         </div>
-        
+
         <div className="mt-6 text-center">
           <span className="text-[10px] text-white/20 font-medium italic">
-            *Simplified dashboard, not actual representative dashboard
+            {t.analyticsPreview.disclaimer}
           </span>
         </div>
       </div>

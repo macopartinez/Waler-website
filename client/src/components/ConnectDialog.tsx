@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ export function ConnectDialog({ isOpen: controlledOpen, setIsOpen: setControlled
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { login, isLoggingIn } = useAuth();
+  const { t } = useLanguage();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,15 +39,15 @@ export function ConnectDialog({ isOpen: controlledOpen, setIsOpen: setControlled
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[425px] rounded-3xl border border-[#02c950]/30 shadow-[0_0_50px_rgba(2,201,80,0.1)] bg-black backdrop-blur-xl text-white">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-center text-white">Welcome Back</DialogTitle>
+          <DialogTitle className="text-2xl font-bold text-center text-white">{t.common.connectDialog.title}</DialogTitle>
           <DialogDescription className="text-center text-gray-400">
-            Enter your credentials to access your dashboard.
+            {t.common.connectDialog.subtitle}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleLogin} className="space-y-6 mt-4">
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm font-medium text-gray-300">Email</Label>
+            <Label htmlFor="email" className="text-sm font-medium text-gray-300">{t.common.connectDialog.emailLabel}</Label>
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
               <Input
@@ -53,7 +55,7 @@ export function ConnectDialog({ isOpen: controlledOpen, setIsOpen: setControlled
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="email@example.com"
+                placeholder={t.common.connectDialog.emailPlaceholder}
                 className="pl-10 rounded-xl border-white/10 h-12 bg-white/5 text-white placeholder:text-gray-600 focus:ring-[#02c950]/20 focus:border-[#02c950] transition-all"
                 required
               />
@@ -61,7 +63,7 @@ export function ConnectDialog({ isOpen: controlledOpen, setIsOpen: setControlled
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm font-medium text-gray-300">Password</Label>
+            <Label htmlFor="password" className="text-sm font-medium text-gray-300">{t.common.connectDialog.passwordLabel}</Label>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
               <Input
@@ -84,16 +86,16 @@ export function ConnectDialog({ isOpen: controlledOpen, setIsOpen: setControlled
           >
             {isLoggingIn ? (
               <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Logging in...
+                <Loader2 className="w-4 h-4 animate-spin" /> {t.common.connectDialog.loggingIn}
               </span>
             ) : (
-              "Login"
+              t.common.connectDialog.loginButton
             )}
           </Button>
         </form>
 
         <div className="text-center text-xs text-gray-500 mt-4">
-          Don't have an account? <a href="/onboard" className="text-[#02c950] hover:underline">Sign up</a>
+          {t.common.connectDialog.noAccount} <a href="/onboard" className="text-[#02c950] hover:underline">{t.common.connectDialog.signUp}</a>
         </div>
       </DialogContent>
     </Dialog>

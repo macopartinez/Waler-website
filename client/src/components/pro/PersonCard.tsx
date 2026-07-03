@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, Minus, MessageCircle, UserCheck, UserX, Clock
 import { useState } from "react";
 import { Person, getDisplayBadges, isProspect, isInCircle, getTemperatureBorderClass, getEffectiveTemperature } from "./types";
 import { BadgeIcon } from "./BadgeIcon";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 
 interface PersonCardProps {
   person: Person;
@@ -12,10 +13,11 @@ interface PersonCardProps {
 }
 
 export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProps) {
+  const { t } = useLanguage();
   const [showMenu, setShowMenu] = useState(false);
   const [showMutuals, setShowMutuals] = useState(false);
   
-  const badges = getDisplayBadges(person);
+  const badges = getDisplayBadges(person, t.personBadges);
   
   const formatDuration = (days: number) => {
     if (days < 7) return `${days}d`;
@@ -32,13 +34,13 @@ export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProp
 
   const getScoreLabel = (score: number, type: 'prospect' | 'health') => {
     if (type === 'prospect') {
-      if (score >= 75) return 'Hot prospect';
-      if (score >= 50) return 'Warm prospect';
-      return 'Cold prospect';
+      if (score >= 75) return t.personCard.scoreLabels.hotProspect;
+      if (score >= 50) return t.personCard.scoreLabels.warmProspect;
+      return t.personCard.scoreLabels.coldProspect;
     } else {
-      if (score >= 75) return 'Strong connection';
-      if (score >= 50) return 'Needs attention';
-      return 'Fragile connection';
+      if (score >= 75) return t.personCard.scoreLabels.strongConnection;
+      if (score >= 50) return t.personCard.scoreLabels.needsAttention;
+      return t.personCard.scoreLabels.fragileConnection;
     }
   };
 
@@ -48,9 +50,9 @@ export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProp
   // cohérence avec le badge et le contour de la carte.
   const effectiveTemp = getEffectiveTemperature(person);
   const prospectLabel =
-    effectiveTemp === 'hot' ? 'Hot prospect' :
-    effectiveTemp === 'warm' ? 'Warm prospect' :
-    effectiveTemp === 'cold' ? 'Cold prospect' :
+    effectiveTemp === 'hot' ? t.personCard.scoreLabels.hotProspect :
+    effectiveTemp === 'warm' ? t.personCard.scoreLabels.warmProspect :
+    effectiveTemp === 'cold' ? t.personCard.scoreLabels.coldProspect :
     getScoreLabel(person.score ?? 0, 'prospect');
   const prospectColor =
     effectiveTemp === 'hot' ? 'text-red-400 bg-red-500/20 border-red-500/30' :
@@ -139,24 +141,24 @@ export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProp
             ? 'bg-green-500/10 border-green-500/20 text-green-300'
             : 'bg-gray-500/10 border-gray-500/20 text-gray-400'
         }`}>
-          <div className="text-xs">Status</div>
+          <div className="text-xs">{t.personCard.status.label}</div>
           <div className="text-sm font-bold">
-            {person.followsYou && person.youFollow ? 'Mutual ✓' :
-             person.followsYou ? 'Follows you' :
-             person.youFollow ? 'You follow' : 'None'}
+            {person.followsYou && person.youFollow ? t.personCard.status.mutual :
+             person.followsYou ? t.personCard.status.followsYou :
+             person.youFollow ? t.personCard.status.youFollow : t.personCard.status.none}
           </div>
         </div>
 
         {/* Duration or Conversion */}
         {person.followDuration !== undefined ? (
           <div className="px-3 py-2 rounded-lg border bg-purple-500/10 border-purple-500/20 text-purple-300">
-            <div className="text-xs">Duration</div>
+            <div className="text-xs">{t.personCard.duration}</div>
             <div className="text-sm font-bold">{formatDuration(person.followDuration)}</div>
           </div>
         ) : person.converted ? (
           <div className="px-3 py-2 rounded-lg border bg-green-500/10 border-green-500/20 text-green-300">
-            <div className="text-xs">Status</div>
-            <div className="text-sm font-bold flex items-center gap-1">Converted <CheckCircle className="w-3 h-3 text-green-400" /></div>
+            <div className="text-xs">{t.personCard.status.label}</div>
+            <div className="text-sm font-bold flex items-center gap-1">{t.personCard.converted} <CheckCircle className="w-3 h-3 text-green-400" /></div>
           </div>
         ) : null}
       </div>
@@ -177,8 +179,8 @@ export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProp
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 ${hasList ? 'hover:bg-blue-500/20 cursor-pointer' : 'cursor-default'}`}
               >
                 <Users className="w-4 h-4" />
-                <span className="text-sm">{person.mutualConnections} connections in common</span>
-                {hasList && <span className="ml-auto text-xs text-blue-400">{showMutuals ? 'Hide' : 'View'}</span>}
+                <span className="text-sm">{interpolate(t.personCard.mutualConnections, { count: person.mutualConnections })}</span>
+                {hasList && <span className="ml-auto text-xs text-blue-400">{showMutuals ? t.personCard.hide : t.personCard.view}</span>}
               </button>
             );
           })()}
@@ -206,16 +208,16 @@ export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProp
         <div className="flex items-center gap-2 mb-3">
           {(() => {
             const map: Record<string, { label: string; cls: string }> = {
-              close: { label: 'Close now', cls: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' },
-              qualify: { label: 'Qualify', cls: 'bg-blue-500/20 border-blue-500/30 text-blue-300' },
-              reengage: { label: 'Re-engage', cls: 'bg-amber-500/20 border-amber-500/30 text-amber-300' },
-              nurture: { label: 'Nurture', cls: 'bg-white/10 border-white/20 text-gray-300' },
+              close: { label: t.personCard.priority.closeNow, cls: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' },
+              qualify: { label: t.personCard.priority.qualify, cls: 'bg-blue-500/20 border-blue-500/30 text-blue-300' },
+              reengage: { label: t.personCard.priority.reengage, cls: 'bg-amber-500/20 border-amber-500/30 text-amber-300' },
+              nurture: { label: t.personCard.priority.nurture, cls: 'bg-white/10 border-white/20 text-gray-300' },
             };
             const p = map[person.settingSummary.priority!] || map.nurture;
             return <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${p.cls}`}>{p.label}</span>;
           })()}
           {typeof person.settingSummary.closeProbability === 'number' && (
-            <span className="text-xs text-gray-400">Close <span className="font-bold text-white">{person.settingSummary.closeProbability}%</span></span>
+            <span className="text-xs text-gray-400">{t.personCard.close} <span className="font-bold text-white">{person.settingSummary.closeProbability}%</span></span>
           )}
         </div>
       )}
@@ -240,7 +242,7 @@ export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProp
       {/* Last Signal */}
       {person.signals.length > 0 && (
         <div className="bg-white/5 rounded-lg p-3">
-          <div className="text-xs text-gray-400 mb-1">Latest signal</div>
+          <div className="text-xs text-gray-400 mb-1">{t.personCard.latestSignal}</div>
           <div className="text-sm text-white">{person.signals[person.signals.length - 1].description}</div>
         </div>
       )}
@@ -258,7 +260,7 @@ export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProp
             }}
             className="w-full px-4 py-2 text-left text-sm text-white hover:bg-white/10 transition-colors"
           >
-            View details
+            {t.personCard.menu.viewDetails}
           </button>
           <button 
             onClick={() => {
@@ -267,7 +269,7 @@ export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProp
             }}
             className="w-full px-4 py-2 text-left text-sm text-white hover:bg-white/10 transition-colors"
           >
-            Edit
+            {t.personCard.menu.edit}
           </button>
           <button 
             onClick={() => {
@@ -276,7 +278,7 @@ export function PersonCard({ person, onClick, onEdit, onDelete }: PersonCardProp
             }}
             className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors"
           >
-            Delete
+            {t.personCard.menu.delete}
           </button>
         </div>
       )}

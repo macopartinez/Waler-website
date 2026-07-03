@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronUp, Settings, CreditCard, Bell, Monitor, LogOut } from "lucide-react";
 import { fallbackAvatar } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface UserMenuProps {
   user: {
@@ -22,6 +23,7 @@ export function UserMenu({ user, onOpenSettings, onLogout }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const [, setLocation] = useLocation();
   const ref = useRef<HTMLDivElement>(null);
+  const { t } = useLanguage();
 
   const [disableAnimation, setDisableAnimation] = useState(
     () => localStorage.getItem("disableBackgroundAnimation") === "true"
@@ -53,7 +55,7 @@ export function UserMenu({ user, onOpenSettings, onLogout }: UserMenuProps) {
       />
       <div className="min-w-0 text-left">
         <p className="text-white font-semibold text-sm truncate leading-tight">
-          {user.username ? `@${user.username}` : "User"}
+          {user.username ? `@${user.username}` : t.userMenu.defaultUser}
         </p>
         <p className="text-gray-500 text-xs truncate mt-0.5">{user.email || ""}</p>
       </div>
@@ -89,22 +91,22 @@ export function UserMenu({ user, onOpenSettings, onLogout }: UserMenuProps) {
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors text-left"
               >
                 <Settings className="w-4 h-4 flex-shrink-0 text-gray-400" />
-                Settings
+                {t.userMenu.settings}
               </button>
               <button
                 onClick={() => go("/billing")}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors text-left"
               >
                 <CreditCard className="w-4 h-4 flex-shrink-0 text-gray-400" />
-                Plans & Billing
+                {t.userMenu.plansAndBilling}
               </button>
               <button
                 disabled
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 cursor-not-allowed text-left"
               >
                 <Bell className="w-4 h-4 flex-shrink-0" />
-                Notifications
-                <span className="ml-auto text-[10px] uppercase tracking-wide text-gray-600">Soon</span>
+                {t.userMenu.notifications}
+                <span className="ml-auto text-[10px] uppercase tracking-wide text-gray-600">{t.userMenu.soon}</span>
               </button>
             </div>
 
@@ -112,7 +114,7 @@ export function UserMenu({ user, onOpenSettings, onLogout }: UserMenuProps) {
             <div className="px-2 pb-2 pt-1 border-t border-white/10">
               <div className="flex items-center gap-3 px-3 py-2.5">
                 <Monitor className="w-4 h-4 flex-shrink-0 text-gray-400" />
-                <span className="text-sm font-medium text-gray-300">Background animation</span>
+                <span className="text-sm font-medium text-gray-300">{t.userMenu.backgroundAnimation}</span>
                 <label className="relative inline-flex items-center cursor-pointer ml-auto">
                   <input
                     type="checkbox"
@@ -135,7 +137,7 @@ export function UserMenu({ user, onOpenSettings, onLogout }: UserMenuProps) {
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-300 hover:text-red-400 hover:bg-red-500/10 transition-colors text-left"
               >
                 <LogOut className="w-4 h-4 flex-shrink-0" />
-                Log Out
+                {t.userMenu.logOut}
               </button>
             </div>
           </motion.div>
@@ -148,7 +150,7 @@ export function UserMenu({ user, onOpenSettings, onLogout }: UserMenuProps) {
         className={`flex items-center gap-3 pl-2 pr-3 py-2 rounded-full bg-[#111] border transition-colors shadow-lg ${
           open ? "border-[#02c950]/40" : "border-white/10 hover:border-white/20"
         }`}
-        aria-label="User menu"
+        aria-label={t.userMenu.ariaLabel}
       >
         {ProfileRow}
         <ChevronUp

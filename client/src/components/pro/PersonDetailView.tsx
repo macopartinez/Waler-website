@@ -1,8 +1,9 @@
 import { ArrowLeft, Trash, Zap, MessageCircle, Heart, Crown, Star, Eye, Flame, CheckCircle, AlertCircle, TrendingUp, TrendingDown, Thermometer, Snowflake, Calendar, Download, Clock, Target, Users, Pencil } from "lucide-react";
 import { useState } from "react";
-import { Person, ProspectStatus, Circle, isProspect, isInCircle, getEffectiveTemperature, SETTING_PHASE_LABELS } from "./types";
+import { Person, ProspectStatus, Circle, isProspect, isInCircle, getEffectiveTemperature, getSettingPhaseLabel } from "./types";
 import { RadarBackground } from "@/components/RadarBackground";
 import { exportPersonToPDF } from "../../utils/pdfExport";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 
 interface PersonDetailViewProps {
   person: Person;
@@ -14,6 +15,7 @@ interface PersonDetailViewProps {
 }
 
 export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete }: PersonDetailViewProps) {
+  const { t, language } = useLanguage();
   const [notes, setNotes] = useState(person.notes || '');
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [signalFilter, setSignalFilter] = useState<'all' | 'like' | 'comment'>('all');
@@ -64,9 +66,9 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
     Icon: typeof Heart | null;
     count: number | null;
   }> = [
-    { key: 'all', label: 'All', Icon: null, count: null },
-    { key: 'like', label: 'Likes', Icon: Heart, count: patternCounts.like },
-    { key: 'comment', label: 'Comments', Icon: MessageCircle, count: patternCounts.comment },
+    { key: 'all', label: t.personDetailView.filters.all, Icon: null, count: null },
+    { key: 'like', label: t.personDetailView.filters.likes, Icon: Heart, count: patternCounts.like },
+    { key: 'comment', label: t.personDetailView.filters.comments, Icon: MessageCircle, count: patternCounts.comment },
   ];
 
   const filteredPattern = pattern.filter((e) => {
@@ -76,15 +78,15 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
   });
 
   const formatDate = (date: Date | undefined) => {
-    if (!date) return 'Unknown date';
+    if (!date) return t.personDetailView.unknownDate;
     try {
-      return new Date(date).toLocaleDateString('en-US', {
+      return new Date(date).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US', {
         day: 'numeric',
         month: 'long',
         year: 'numeric'
       });
     } catch (e) {
-      return 'Invalid date';
+      return t.personDetailView.invalidDate;
     }
   };
 
@@ -124,19 +126,19 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
   const getCircleConfig = (c: Circle) => {
     switch (c) {
       case 'vip':
-        return { label: 'Circle 1 — VIP', desc: 'Instant alerts', icon: <Crown className="w-5 h-5" />, max: 'Max 10 accounts' };
+        return { label: t.personDetailView.circleLabels.vip, desc: t.personDetailView.circleDesc.vip, icon: <Crown className="w-5 h-5" />, max: t.personDetailView.circleMax.vip };
       case 'keep':
-        return { label: 'Circle 2 — To keep', desc: 'Weekly alert', icon: <Star className="w-5 h-5" />, max: 'Max 50 accounts' };
+        return { label: t.personDetailView.circleLabels.keep, desc: t.personDetailView.circleDesc.keep, icon: <Star className="w-5 h-5" />, max: t.personDetailView.circleMax.keep };
       case 'watch':
-        return { label: 'Circle 3 — To watch', desc: 'Monthly report', icon: <Eye className="w-5 h-5" />, max: 'Max 100 accounts' };
+        return { label: t.personDetailView.circleLabels.watch, desc: t.personDetailView.circleDesc.watch, icon: <Eye className="w-5 h-5" />, max: t.personDetailView.circleMax.watch };
     }
   };
 
   const displayScore = person.healthScore || person.score || 0;
-  const scoreLabel = isInCircle(person) ? 'Relationship Score' : 'Score';
+  const scoreLabel = isInCircle(person) ? t.personDetailView.relationshipScore : t.personDetailView.score;
   const scoreSubtitle = isInCircle(person) 
-    ? displayScore >= 75 ? 'Strong and stable connection' : displayScore >= 50 ? 'Heads up, cooling-off signal' : 'Fragile connection — action recommended'
-    : displayScore >= 75 ? 'Very hot prospect' : displayScore >= 50 ? 'Warm prospect' : 'Cold prospect';
+    ? displayScore >= 75 ? t.personDetailView.scoreSubtitle.strongStable : displayScore >= 50 ? t.personDetailView.scoreSubtitle.coolingSignal : t.personDetailView.scoreSubtitle.fragileAction
+    : displayScore >= 75 ? t.personDetailView.scoreSubtitle.veryHot : displayScore >= 50 ? t.personDetailView.scoreSubtitle.warm : t.personDetailView.scoreSubtitle.cold;
 
   return (
     <div className="fixed inset-0 w-full h-full bg-black text-white z-[9999] overflow-hidden">
@@ -153,7 +155,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-3"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span className="text-sm font-medium">Back</span>
+              <span className="text-sm font-medium">{t.personDetailView.back}</span>
             </button>
             <h1 className="text-4xl font-display font-black text-white mb-1">{person.displayName}</h1>
             <a
@@ -174,17 +176,17 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                   badges.push(getCircleConfig(person.circle).label);
                 }
                 if (isProspect(person) && person.prospectStatus) {
-                  const statusEn = person.prospectStatus === 'hot' ? 'Hot' :
-                    person.prospectStatus === 'warm' ? 'Warm' :
-                    person.prospectStatus === 'cold' ? 'Cold' :
-                    person.prospectStatus === 'converted' ? 'Converted' : 'Lost';
-                  badges.push(`Prospect — ${statusEn}`);
+                  const statusLabel = person.prospectStatus === 'hot' ? t.personBadges.hot :
+                    person.prospectStatus === 'warm' ? t.personBadges.warm :
+                    person.prospectStatus === 'cold' ? t.personBadges.cold :
+                    person.prospectStatus === 'converted' ? t.personBadges.converted : t.personBadges.lost;
+                  badges.push(interpolate(t.personDetailView.pdfExport.prospectPrefix, { status: statusLabel }));
                 }
 
                 const connectionStatus =
-                  person.followsYou && person.youFollow ? 'Mutual' :
-                  person.followsYou ? 'Follows you' :
-                  person.youFollow ? 'You follow' : 'None';
+                  person.followsYou && person.youFollow ? t.personDetailView.connection.mutual :
+                  person.followsYou ? t.personDetailView.connection.followsYou :
+                  person.youFollow ? t.personDetailView.connection.youFollow : t.personDetailView.connection.none;
 
                 exportPersonToPDF({
                   displayName: person.displayName,
@@ -202,10 +204,10 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                   notes,
                   timeline: pattern.map((entry) => ({
                     label: entry.liked && entry.commented
-                      ? 'Liked and commented on a post'
+                      ? t.personDetailView.pdfExport.likedAndCommented
                       : entry.liked
-                      ? 'Liked one of your posts'
-                      : 'Commented on one of your posts',
+                      ? t.personDetailView.pdfExport.likedPost
+                      : t.personDetailView.pdfExport.commentedPost,
                     date: entry.timestamp,
                     postUrl: entry.postUrl,
                     ruptureBefore: entry.gapBefore,
@@ -215,11 +217,11 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold hover:shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all flex items-center gap-2"
             >
               <Download className="w-4 h-4" />
-              Export PDF
+              {t.personDetailView.exportPdf}
             </button>
             <button
               onClick={() => {
-                const raw = window.prompt('New Instagram username', person.instagramUsername);
+                const raw = window.prompt(t.personDetailView.renamePrompt, person.instagramUsername);
                 if (raw == null) return; // annulé
                 const next = raw.trim().replace(/^@+/, '');
                 if (next && next.toLowerCase() !== person.instagramUsername.toLowerCase()) {
@@ -229,14 +231,14 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 font-medium transition-colors flex items-center gap-2"
             >
               <Pencil className="w-4 h-4" />
-              Rename
+              {t.personDetailView.rename}
             </button>
             <button
               onClick={onDelete}
               className="px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium transition-colors flex items-center gap-2"
             >
               <Trash className="w-4 h-4" />
-              Delete
+              {t.personDetailView.delete}
             </button>
           </div>
         </div>
@@ -250,7 +252,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               'bg-gray-500/20 border-gray-500/30 text-gray-400'
             }`}>
               {getCircleConfig(person.circle).icon}
-              <span className="font-semibold">{getCircleConfig(person.circle).label.split(' — ')[1]}</span>
+              <span className="font-semibold">{t.personBadges[person.circle]}</span>
             </div>
           )}
           {/* Statut unique du contact : on affiche la température calculée à partir des
@@ -259,22 +261,22 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               deux badges contradictoires (ex. "Froid" manuel vs "Chaud · 70/100" calculé). */}
           {(() => {
             // Ressenti effectif : température calculée en priorité, repli sur statut manuel.
-            const t = getEffectiveTemperature(person);
-            if (!t) return null;
+            const temp = getEffectiveTemperature(person);
+            if (!temp) return null;
             // Le score d'analyse n'est montré que s'il correspond encore au ressenti
             // affiché (après un override manuel, il ne refléterait plus rien).
-            const showScore = person.dynamics && person.dynamics.temperature === t;
+            const showScore = person.dynamics && person.dynamics.temperature === temp;
             return (
               <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${
-                t === 'hot' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
-                t === 'warm' ? 'bg-orange-500/20 border-orange-500/30 text-orange-400' :
+                temp === 'hot' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
+                temp === 'warm' ? 'bg-orange-500/20 border-orange-500/30 text-orange-400' :
                 'bg-blue-500/20 border-blue-500/30 text-blue-400'
               }`}>
-                {t === 'hot' && <Flame className="w-4 h-4" />}
-                {t === 'warm' && <Thermometer className="w-4 h-4" />}
-                {t === 'cold' && <Snowflake className="w-4 h-4" />}
+                {temp === 'hot' && <Flame className="w-4 h-4" />}
+                {temp === 'warm' && <Thermometer className="w-4 h-4" />}
+                {temp === 'cold' && <Snowflake className="w-4 h-4" />}
                 <span className="font-semibold">
-                  Sentiment: {t === 'hot' ? 'Hot' : t === 'warm' ? 'Warm' : 'Cold'}
+                  {interpolate(t.personDetailView.sentiment, { temp: temp === 'hot' ? t.personBadges.hot : temp === 'warm' ? t.personBadges.warm : t.personBadges.cold })}
                   {showScore ? ` · ${person.dynamics!.temperatureScore}/100` : ''}
                 </span>
               </div>
@@ -283,11 +285,11 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
           {person.settingPhase && (
             <div className="flex items-center gap-2 px-4 py-2 rounded-full border bg-emerald-500/20 border-emerald-500/30 text-emerald-400">
               <Target className="w-4 h-4" />
-              <span className="font-semibold">Setting: {SETTING_PHASE_LABELS[person.settingPhase]}</span>
+              <span className="font-semibold">{interpolate(t.personDetailView.settingLabel, { phase: getSettingPhaseLabel(person.settingPhase, t.settingPhases) })}</span>
             </div>
           )}
           <div className="flex items-center gap-2 px-4 py-2 rounded-full border bg-purple-500/20 border-purple-500/30 text-purple-400">
-            <span className="text-sm">Score: {displayScore}/100</span>
+            <span className="text-sm">{interpolate(t.personDetailView.scoreLabel, { score: displayScore })}</span>
           </div>
         </div>
 
@@ -296,10 +298,10 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
           <div className="bg-black/80 backdrop-blur-sm border border-white/10 rounded-2xl p-6 mb-6">
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <Target className="w-5 h-5 text-emerald-400" />
-              Setting — qualification
+              {t.personDetailView.settingQualification}
               {person.settingPhase && (
                 <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300">
-                  {SETTING_PHASE_LABELS[person.settingPhase]}
+                  {getSettingPhaseLabel(person.settingPhase, t.settingPhases)}
                 </span>
               )}
             </h3>
@@ -309,19 +311,19 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 {person.settingSummary.priority && (() => {
                   const map: Record<string, { label: string; cls: string }> = {
-                    close: { label: 'Close now', cls: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' },
-                    qualify: { label: 'Qualify', cls: 'bg-blue-500/20 border-blue-500/30 text-blue-300' },
-                    reengage: { label: 'Re-engage', cls: 'bg-amber-500/20 border-amber-500/30 text-amber-300' },
-                    nurture: { label: 'Nurture', cls: 'bg-white/10 border-white/20 text-gray-300' },
+                    close: { label: t.personCard.priority.closeNow, cls: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' },
+                    qualify: { label: t.personCard.priority.qualify, cls: 'bg-blue-500/20 border-blue-500/30 text-blue-300' },
+                    reengage: { label: t.personCard.priority.reengage, cls: 'bg-amber-500/20 border-amber-500/30 text-amber-300' },
+                    nurture: { label: t.personCard.priority.nurture, cls: 'bg-white/10 border-white/20 text-gray-300' },
                   };
                   const p = map[person.settingSummary.priority] || map.nurture;
                   return <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${p.cls}`}>{p.label}</span>;
                 })()}
                 {person.settingSummary.momentum && (() => {
                   const map: Record<string, { label: string; Icon: any; cls: string }> = {
-                    accelerating: { label: 'Momentum rising', Icon: TrendingUp, cls: 'text-emerald-400' },
-                    cooling: { label: 'Cooling off', Icon: TrendingDown, cls: 'text-red-400' },
-                    steady: { label: 'Steady', Icon: Thermometer, cls: 'text-gray-400' },
+                    accelerating: { label: t.personDetailView.momentum.rising, Icon: TrendingUp, cls: 'text-emerald-400' },
+                    cooling: { label: t.personDetailView.momentum.cooling, Icon: TrendingDown, cls: 'text-red-400' },
+                    steady: { label: t.personDetailView.momentum.steady, Icon: Thermometer, cls: 'text-gray-400' },
                   };
                   const m = map[person.settingSummary.momentum] || map.steady;
                   return (
@@ -337,7 +339,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
             <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-200 mb-4">
               <Target className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <div>
-                <div className="text-[10px] uppercase tracking-wide text-emerald-400/80 mb-0.5">Next step</div>
+                <div className="text-[10px] uppercase tracking-wide text-emerald-400/80 mb-0.5">{t.personDetailView.nextStep}</div>
                 <span className="text-sm">{person.settingSummary.nextStep}</span>
               </div>
             </div>
@@ -346,7 +348,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
             {typeof person.settingSummary.closeProbability === 'number' && (
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-gray-400">Close probability (now)</span>
+                  <span className="text-xs text-gray-400">{t.personDetailView.closeProbability}</span>
                   <span className="text-xs font-bold text-white">{person.settingSummary.closeProbability}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-white/10 overflow-hidden">
@@ -368,7 +370,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
             {typeof person.settingSummary.qualificationScore === 'number' && (
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-gray-400">Close readiness</span>
+                  <span className="text-xs text-gray-400">{t.personDetailView.closeReadiness}</span>
                   <span className="text-xs font-bold text-white">{person.settingSummary.qualificationScore}/100</span>
                 </div>
                 <div className="h-2 rounded-full bg-white/10 overflow-hidden">
@@ -391,7 +393,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-200 mb-4">
                 <Target className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-[10px] uppercase tracking-wide text-blue-300/80 mb-0.5">Recommended offer</div>
+                  <div className="text-[10px] uppercase tracking-wide text-blue-300/80 mb-0.5">{t.personDetailView.recommendedOffer}</div>
                   <span className="text-sm">{person.settingSummary.recommendedOffer}</span>
                 </div>
               </div>
@@ -402,7 +404,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-200 mb-4">
                 <Flame className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-[10px] uppercase tracking-wide text-red-300/80 mb-0.5">Closing tactic</div>
+                  <div className="text-[10px] uppercase tracking-wide text-red-300/80 mb-0.5">{t.personDetailView.closingTactic}</div>
                   <span className="text-sm">{person.settingSummary.closingTactic}</span>
                 </div>
               </div>
@@ -411,9 +413,9 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
             {/* Ce que le prospect a révélé */}
             <div className="grid grid-cols-3 gap-2 mb-4">
               {([
-                { label: 'Goal', ok: person.settingSummary.revealed.objective },
-                { label: 'Situation', ok: person.settingSummary.revealed.situation },
-                { label: 'Pain', ok: person.settingSummary.revealed.pain },
+                { label: t.personDetailView.revealed.goal, ok: person.settingSummary.revealed.objective },
+                { label: t.personDetailView.revealed.situation, ok: person.settingSummary.revealed.situation },
+                { label: t.personDetailView.revealed.pain, ok: person.settingSummary.revealed.pain },
               ]).map((r) => (
                 <div
                   key={r.label}
@@ -437,25 +439,25 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 {person.settingSummary.facts.activity && (
                   <div className="bg-white/5 rounded-xl p-3">
-                    <div className="text-xs text-gray-400 mb-1">Activity</div>
+                    <div className="text-xs text-gray-400 mb-1">{t.personDetailView.facts.activity}</div>
                     <div className="text-sm font-bold text-white">{person.settingSummary.facts.activity}</div>
                   </div>
                 )}
                 {person.settingSummary.facts.budget && (
                   <div className="bg-white/5 rounded-xl p-3">
-                    <div className="text-xs text-gray-400 mb-1">Budget</div>
+                    <div className="text-xs text-gray-400 mb-1">{t.personDetailView.facts.budget}</div>
                     <div className="text-sm font-bold text-white">{person.settingSummary.facts.budget}</div>
                   </div>
                 )}
                 {person.settingSummary.facts.goal && (
                   <div className="bg-white/5 rounded-xl p-3">
-                    <div className="text-xs text-gray-400 mb-1">Target figure</div>
+                    <div className="text-xs text-gray-400 mb-1">{t.personDetailView.facts.targetFigure}</div>
                     <div className="text-sm font-bold text-white">{person.settingSummary.facts.goal}</div>
                   </div>
                 )}
                 {person.settingSummary.facts.timeline && (
                   <div className="bg-white/5 rounded-xl p-3">
-                    <div className="text-xs text-gray-400 mb-1">Timing</div>
+                    <div className="text-xs text-gray-400 mb-1">{t.personDetailView.facts.timing}</div>
                     <div className="text-sm font-bold text-white">{person.settingSummary.facts.timeline}</div>
                   </div>
                 )}
@@ -465,7 +467,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
             {/* Objections détectées */}
             {person.settingSummary.facts.objections.length > 0 && (
               <div className="mb-4">
-                <div className="text-xs text-gray-400 mb-2">Detected objections</div>
+                <div className="text-xs text-gray-400 mb-2">{t.personDetailView.detectedObjections}</div>
                 <div className="flex flex-wrap gap-2">
                   {person.settingSummary.facts.objections.map((o, idx) => (
                     <span
@@ -482,7 +484,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
             {/* À creuser (axes encore non qualifiés) */}
             {person.settingSummary.missing.length > 0 && (
               <div>
-                <div className="text-xs text-gray-400 mb-2">To explore</div>
+                <div className="text-xs text-gray-400 mb-2">{t.personDetailView.toExplore}</div>
                 <div className="flex flex-wrap gap-2">
                   {person.settingSummary.missing.map((m, idx) => (
                     <span
@@ -503,46 +505,46 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
           <div className="bg-black/80 backdrop-blur-sm border border-white/10 rounded-2xl p-6 mb-6">
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <Thermometer className="w-5 h-5 text-orange-400" />
-              Conversation dynamics
+              {t.personDetailView.conversationDynamics}
             </h3>
 
             {person.dynamics && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div className="bg-white/5 rounded-xl p-4">
-                  <div className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Their avg. reply</div>
+                  <div className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> {t.personDetailView.theirAvgReply}</div>
                   <div className="text-lg font-bold text-white">{formatResponseTime(person.dynamics.theirAvgResponseMs)}</div>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
-                  <div className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Your avg. reply</div>
+                  <div className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> {t.personDetailView.yourAvgReply}</div>
                   <div className="text-lg font-bold text-white">{formatResponseTime(person.dynamics.myAvgResponseMs)}</div>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
-                  <div className="text-xs text-gray-400 mb-1">Response rate</div>
+                  <div className="text-xs text-gray-400 mb-1">{t.personDetailView.responseRate}</div>
                   <div className="text-lg font-bold text-white">{Math.round(person.dynamics.theirResponseRate * 100)}%</div>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
-                  <div className="text-xs text-gray-400 mb-1">Short replies</div>
+                  <div className="text-xs text-gray-400 mb-1">{t.personDetailView.shortReplies}</div>
                   <div className="text-lg font-bold text-white">{Math.round(person.dynamics.briefReplyRatio * 100)}%</div>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
-                  <div className="text-xs text-gray-400 mb-1">Messages</div>
+                  <div className="text-xs text-gray-400 mb-1">{t.personDetailView.messages}</div>
                   <div className="text-lg font-bold text-white">{person.dynamics.msgCount}</div>
-                  <div className="text-xs text-gray-500">{person.dynamics.theirMsgCount} received · {person.dynamics.myMsgCount} sent</div>
+                  <div className="text-xs text-gray-500">{interpolate(t.personDetailView.receivedSent, { received: person.dynamics.theirMsgCount, sent: person.dynamics.myMsgCount })}</div>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
                   <div className="text-xs text-gray-400 mb-1 flex items-center gap-1">
                     {person.dynamics.cadenceTrend === 'up' ? <TrendingUp className="w-3 h-3 text-green-400" /> :
                      person.dynamics.cadenceTrend === 'down' ? <TrendingDown className="w-3 h-3 text-red-400" /> : null}
-                    Cadence
+                    {t.personDetailView.cadence}
                   </div>
                   <div className="text-lg font-bold text-white">
-                    {person.dynamics.cadenceTrend === 'up' ? 'Rising' : person.dynamics.cadenceTrend === 'down' ? 'Falling' : 'Steady'}
+                    {person.dynamics.cadenceTrend === 'up' ? t.personDetailView.cadenceTrend.rising : person.dynamics.cadenceTrend === 'down' ? t.personDetailView.cadenceTrend.falling : t.personDetailView.cadenceTrend.steady}
                   </div>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
-                  <div className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Eye className="w-3 h-3" /> Last message</div>
+                  <div className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Eye className="w-3 h-3" /> {t.personDetailView.lastMessage}</div>
                   <div className="text-lg font-bold text-white">
-                    {person.dynamics.seenNotAnswered ? 'Seen, no reply' : person.dynamics.lastMessageIsSent ? 'From you' : 'From them'}
+                    {person.dynamics.seenNotAnswered ? t.personDetailView.lastMessageStatus.seenNoReply : person.dynamics.lastMessageIsSent ? t.personDetailView.lastMessageStatus.fromYou : t.personDetailView.lastMessageStatus.fromThem}
                   </div>
                 </div>
               </div>
@@ -550,7 +552,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
 
             {person.advice && person.advice.length > 0 && (
               <div className="space-y-2">
-                <div className="text-xs text-gray-400 mb-1">Relationship advice</div>
+                <div className="text-xs text-gray-400 mb-1">{t.personDetailView.relationshipAdvice}</div>
                 {person.advice.map((tip, idx) => (
                   <div key={idx} className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-200">
                     <Target className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -564,7 +566,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
 
         <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-6">
           <Calendar className="w-3 h-3" />
-          <span>Added on {formatDate(person.addedAt)} • Connected for {person.followDuration || 0} days</span>
+          <span>{interpolate(t.personDetailView.addedOn, { date: formatDate(person.addedAt), days: person.followDuration || 0 })}</span>
         </div>
 
         {/* Main Score Card */}
@@ -574,7 +576,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               <h2 className="text-2xl font-bold text-white mb-1">{scoreLabel}</h2>
               <p className="text-sm text-gray-400 mb-4">{scoreSubtitle}</p>
               <p className="text-xs text-gray-500">
-                Score based on: mutual follow duration, stability, recency, profile activity
+                {t.personDetailView.scoreBasedOn}
               </p>
             </div>
             <div className="text-6xl font-black text-white">{displayScore}</div>
@@ -584,35 +586,35 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl p-4">
-            <div className="text-xs text-gray-400 mb-1">Connection status</div>
+            <div className="text-xs text-gray-400 mb-1">{t.personDetailView.stats.connectionStatus}</div>
             <div className="text-lg font-bold text-white">
-              {person.followsYou && person.youFollow ? 'Mutual' :
-               person.followsYou ? 'Follows you' :
-               person.youFollow ? 'You follow' : 'None'}
+              {person.followsYou && person.youFollow ? t.personDetailView.connection.mutual :
+               person.followsYou ? t.personDetailView.connection.followsYou :
+               person.youFollow ? t.personDetailView.connection.youFollow : t.personDetailView.connection.none}
             </div>
             <div className="text-xs text-gray-500">
-              {person.followsYou && person.youFollow ? 'You follow each other' :
-               person.followsYou ? 'Follows you' :
-               person.youFollow ? 'You follow them' : 'No follow'}
+              {person.followsYou && person.youFollow ? t.personDetailView.stats.followEachOther :
+               person.followsYou ? t.personDetailView.stats.followsYouDesc :
+               person.youFollow ? t.personDetailView.stats.youFollowThemDesc : t.personDetailView.stats.noFollow}
             </div>
           </div>
 
           <div className="bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl p-4">
-            <div className="text-xs text-gray-400 mb-1">Connection length</div>
-            <div className="text-lg font-bold text-white">{person.followDuration || 0} days</div>
-            <div className="text-xs text-gray-500">Recent connection</div>
+            <div className="text-xs text-gray-400 mb-1">{t.personDetailView.stats.connectionLength}</div>
+            <div className="text-lg font-bold text-white">{interpolate(t.personDetailView.stats.days, { count: person.followDuration || 0 })}</div>
+            <div className="text-xs text-gray-500">{t.personDetailView.stats.recentConnection}</div>
           </div>
 
           <div className="bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl p-4">
-            <div className="text-xs text-gray-400 mb-1">Mutual connections</div>
+            <div className="text-xs text-gray-400 mb-1">{t.personDetailView.stats.mutualConnectionsLabel}</div>
             <div className="text-lg font-bold text-white">{person.mutualConnections || 0}</div>
-            <div className="text-xs text-gray-500">In common</div>
+            <div className="text-xs text-gray-500">{t.personDetailView.stats.inCommon}</div>
           </div>
 
           <div className="bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl p-4">
-            <div className="text-xs text-gray-400 mb-1">Detected signals</div>
+            <div className="text-xs text-gray-400 mb-1">{t.personDetailView.stats.detectedSignals}</div>
             <div className="text-lg font-bold text-white">{signals.length}</div>
-            <div className="text-xs text-gray-500">Total</div>
+            <div className="text-xs text-gray-500">{t.personDetailView.stats.total}</div>
           </div>
         </div>
 
@@ -621,7 +623,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
           <div className="mb-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <Users className="w-5 h-5 text-blue-400" />
-              Mutual connections
+              {t.personDetailView.mutualConnectionsTitle}
               <span className="text-sm font-normal text-gray-400">({person.mutualConnectionsList.length})</span>
             </h3>
             <div className="bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl p-4 flex flex-wrap gap-2">
@@ -643,7 +645,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
         {/* Évolution de la relation (follow / unfollow / ghost / refollow) */}
         {relationSignals.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-xl font-bold text-white mb-4">Relationship evolution</h3>
+            <h3 className="text-xl font-bold text-white mb-4">{t.personDetailView.relationshipEvolution}</h3>
             <div className="bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl p-6">
               {relationSignals.map((signal, idx) => {
                 const config = relationConfig[signal.type] || relationConfig.follow;
@@ -669,7 +671,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
 
         {/* Timeline des interactions (streak : ligne continue, coupée aux ruptures) */}
         <div className="mb-6">
-          <h3 className="text-xl font-bold text-white mb-4">Interaction timeline</h3>
+          <h3 className="text-xl font-bold text-white mb-4">{t.personDetailView.interactionTimeline}</h3>
 
           {/* Filtres par type */}
           <div className="flex flex-wrap gap-2 mb-3">

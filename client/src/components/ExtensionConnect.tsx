@@ -11,11 +11,12 @@ import {
   Users,
 } from "lucide-react";
 import { WALER_EXTENSION_ID, sendToExtension } from "@/lib/extension";
+import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 
 // Lien d'installation (Web Store).
 const WALER_EXTENSION_STORE_URL =
   (import.meta as any).env?.VITE_WALER_EXTENSION_STORE_URL ||
-  `https://chrome.google.com/webstore/detail/${WALER_EXTENSION_ID}`;
+  "https://chromewebstore.google.com/detail/waler-instagram-analytics/dbogablehjicifjkkgigabhdofbjjbmj";
 
 interface ExtensionConnectProps {
   /** Login owner (utilisé pour le handshake d'auth de l'extension). */
@@ -51,6 +52,7 @@ export default function ExtensionConnect({
   const [status, setStatus] = useState<Status>("idle");
   const [detected, setDetected] = useState<{ igUsername: string; dsUserId: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const { t } = useLanguage();
 
   /** Lie le compte détecté au login owner et notifie le parent. */
   const linkAccount = async (igUsername: string, dsUserId: string) => {
@@ -64,13 +66,13 @@ export default function ExtensionConnect({
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Linking failed");
+        throw new Error(err.message || t.extensionConnect.linkingFailed);
       }
       // Rafraîchir l'état de connexion (isConnected) du login.
       queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
       onConnected({ igUsername, dsUserId });
     } catch (e: any) {
-      setErrorMsg(e?.message || "Something went wrong while linking your account.");
+      setErrorMsg(e?.message || t.extensionConnect.genericError);
       setStatus("error");
     }
   };
@@ -148,11 +150,10 @@ export default function ExtensionConnect({
             <div className="w-14 h-14 mx-auto rounded-2xl bg-[#02c950]/15 flex items-center justify-center">
               <Puzzle className="w-7 h-7 text-[#02c950]" />
             </div>
-            <h2 className="text-2xl font-bold text-white">Connect your account</h2>
+            <h2 className="text-2xl font-bold text-white">{t.extensionConnect.title}</h2>
             <p className="text-gray-400 text-sm leading-relaxed">
-              Log into <span className="text-white font-medium">one Instagram account</span> with the
-              Waler extension. It becomes your{" "}
-              <span className="text-white font-medium">reference account</span> — you can add others later.
+              {t.extensionConnect.subtitlePrefix} <span className="text-white font-medium">{t.extensionConnect.subtitleAccount}</span> {t.extensionConnect.subtitleMiddle}{" "}
+              <span className="text-white font-medium">{t.extensionConnect.subtitleReference}</span> {t.extensionConnect.subtitleSuffix}
             </p>
           </div>
 
@@ -160,9 +161,9 @@ export default function ExtensionConnect({
           <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-4">
             <ol className="space-y-3.5">
               {[
-                <>Install the <span className="text-white font-medium">Waler extension</span> and pin it to your toolbar.</>,
-                <>Open <span className="text-white font-medium">instagram.com</span> and log into the account you want to track{claimedUsername ? <> (<span className="text-white">@{claimedUsername}</span>)</> : null}.</>,
-                <>Come back here and click <span className="text-white font-medium">Connect my account</span>.</>,
+                <>{t.extensionConnect.step1} <span className="text-white font-medium">{t.extensionConnect.step1Extension}</span> {t.extensionConnect.step1End}</>,
+                <>{t.extensionConnect.step2Prefix} <span className="text-white font-medium">{t.extensionConnect.step2Domain}</span> {t.extensionConnect.step2Middle}{claimedUsername ? <> (<span className="text-white">@{claimedUsername}</span>)</> : null}{t.extensionConnect.step2End}</>,
+                <>{t.extensionConnect.step3} <span className="text-white font-medium">{t.extensionConnect.step3Button}</span>{t.extensionConnect.step3End}</>,
               ].map((text, i) => (
                 <li key={i} className="flex items-start gap-3">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full border border-[#02c950] flex items-center justify-center text-[#02c950] text-xs font-bold">
@@ -180,7 +181,7 @@ export default function ExtensionConnect({
                 className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-bold transition-all flex items-center justify-center gap-2"
               >
                 <Download className="w-4 h-4" />
-                Install
+                {t.extensionConnect.install}
               </a>
               <a
                 href={claimedUsername ? `https://www.instagram.com/${claimedUsername}/` : "https://www.instagram.com/"}
@@ -189,7 +190,7 @@ export default function ExtensionConnect({
                 className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-bold transition-all flex items-center justify-center gap-2"
               >
                 <Instagram className="w-4 h-4" />
-                Open Instagram
+                {t.extensionConnect.openInstagram}
               </a>
             </div>
           </div>
@@ -199,7 +200,7 @@ export default function ExtensionConnect({
             <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
               <Puzzle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-gray-300">
-                We couldn't reach the extension. Make sure it's installed and pinned, then try again.
+                {t.extensionConnect.notInstalled}
               </p>
             </div>
           )}
@@ -207,7 +208,7 @@ export default function ExtensionConnect({
             <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
               <Instagram className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-gray-300">
-                The extension is installed, but you're not logged into Instagram. Open instagram.com, log in, then try again.
+                {t.extensionConnect.notLoggedIn}
               </p>
             </div>
           )}
@@ -224,12 +225,12 @@ export default function ExtensionConnect({
               <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
                 <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-gray-300">
-                  You're logged into Instagram as{" "}
+                  {t.extensionConnect.reviewLoggedInAs}{" "}
                   <strong className="text-white">@{detected.igUsername}</strong>
                   {claimedUsername ? (
-                    <>, not <strong className="text-white">@{claimedUsername}</strong></>
+                    <>, {t.extensionConnect.reviewNotAs} <strong className="text-white">@{claimedUsername}</strong></>
                   ) : null}
-                  . We'll use <strong className="text-white">@{detected.igUsername}</strong> as your reference account.
+                  {t.extensionConnect.reviewWillUse} <strong className="text-white">@{detected.igUsername}</strong> {t.extensionConnect.reviewAsReference}
                 </p>
               </div>
               <button
@@ -237,13 +238,13 @@ export default function ExtensionConnect({
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#02c950] to-emerald-500 hover:from-[#02d955] hover:to-emerald-600 text-white font-bold transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(2,201,80,0.3)]"
               >
                 <Users className="w-4 h-4" />
-                Use @{detected.igUsername}
+                {interpolate(t.extensionConnect.useAccount, { username: detected.igUsername })}
               </button>
               <button
                 onClick={connect}
                 className="w-full py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold transition-all"
               >
-                I'll switch accounts on Instagram — retry
+                {t.extensionConnect.switchRetry}
               </button>
             </div>
           )}
@@ -263,17 +264,17 @@ export default function ExtensionConnect({
               {status === "connecting" ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Detecting your account…
+                  {t.extensionConnect.detecting}
                 </>
               ) : status === "linking" ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Linking…
+                  {t.extensionConnect.linking}
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="w-5 h-5" />
-                  Connect my account
+                  {t.extensionConnect.connectButton}
                 </>
               )}
             </button>

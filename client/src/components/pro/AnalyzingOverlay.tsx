@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Loader2, UserCheck, Puzzle, MousePointerClick, ArrowDownToLine } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface AnalyzingOverlayProps {
   username: string;
@@ -8,6 +9,7 @@ interface AnalyzingOverlayProps {
 }
 
 export function AnalyzingOverlay({ username, onClose }: AnalyzingOverlayProps) {
+  const { t } = useLanguage();
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -29,36 +31,35 @@ export function AnalyzingOverlay({ username, onClose }: AnalyzingOverlayProps) {
 
           {/* Title */}
           <h2 className="text-2xl font-display font-black text-white mb-2">
-            <span className="text-green-400">@{username}</span> added
+            <span className="text-green-400">@{username}</span> {t.analyzingOverlay.added}
           </h2>
 
           {/* Subtitle — honnête : aucune analyse ne tourne ici */}
           <p className="text-gray-400 mb-6">
-            Engagement analysis (likes &amp; comments) runs in the{" "}
-            <span className="text-gray-200 font-semibold">Waler extension</span>, not here.
-            Launch it to get this person's score.
+            {t.analyzingOverlay.subtitlePrefix}{" "}
+            <span className="text-gray-200 font-semibold">{t.analyzingOverlay.subtitleExtension}</span>{t.analyzingOverlay.subtitleEnd}
           </p>
 
           {/* Vraies étapes à suivre (pas de fausse progression) */}
           <div className="space-y-3 mb-6 text-left">
             <NextStep
               icon={<Puzzle className="w-4 h-4 text-green-400" />}
-              label="Open the Waler extension on Instagram"
+              label={t.analyzingOverlay.step1}
             />
             <NextStep
               icon={<MousePointerClick className="w-4 h-4 text-green-400" />}
-              label={'Click "Analyze engagement (posts)"'}
+              label={t.analyzingOverlay.step2}
             />
             <NextStep
               icon={<ArrowDownToLine className="w-4 h-4 text-green-400" />}
-              label="Results appear here automatically when ready"
+              label={t.analyzingOverlay.step3}
             />
           </div>
 
           {/* Indicateur d'attente réel : on poll le statut côté serveur */}
           <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-6">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Waiting for analysis results…</span>
+            <span>{t.analyzingOverlay.waiting}</span>
           </div>
 
           {onClose && (
@@ -66,7 +67,7 @@ export function AnalyzingOverlay({ username, onClose }: AnalyzingOverlayProps) {
               onClick={onClose}
               className="w-full py-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 font-semibold text-sm hover:bg-green-500/20 transition-colors"
             >
-              Got it
+              {t.analyzingOverlay.gotIt}
             </button>
           )}
         </motion.div>
