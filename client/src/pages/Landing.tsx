@@ -2,8 +2,8 @@ import { RadarBackground } from "@/components/RadarBackground";
 import { BackgroundWaler } from "@/components/BackgroundWaler";
 import { NavBar } from "@/components/NavBar";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChart3, ShieldCheck, Zap, Eye, Search, Lock, ChevronDown, ArrowRight, Users, Heart, TrendingDown, Shield, Star, User, Crown, Target, TrendingUp, Network, MessageCircle, Activity, Clock, Link, UserPlus, Sparkles, Flame, Repeat, Check, UserMinus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { BarChart3, ShieldCheck, Zap, Eye, Search, Lock, ChevronDown, ArrowRight, Users, Heart, TrendingDown, Shield, Star, User, Crown, Target, TrendingUp, Network, MessageCircle, Activity, Clock, Link, UserPlus, Sparkles, Flame, Repeat, Check, UserMinus, SlidersHorizontal, X } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { AnalyticsPreview } from "@/components/AnalyticsPreview";
 import { ConnectDialog } from "@/components/ConnectDialog";
@@ -275,6 +275,71 @@ export default function Landing() {
                   <p className="leading-relaxed max-w-xs mx-auto text-[#ffffff]">{item.desc}</p>
                 </motion.div>
               ))}
+            </div>
+          </motion.div>
+        </div>
+      </section>
+      <section className="h-screen snap-start snap-always flex items-center justify-center relative px-6" data-testid="section-comparison">
+        <div className="max-w-4xl mx-auto w-full">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          >
+            <div className="text-center mb-12 text-paper">
+              <h2 className="text-4xl md:text-6xl font-display font-black mb-6 text-white tracking-tighter">
+                {t.landing.comparison.title} <span className="text-gradient">{t.landing.comparison.titleHighlight}</span>
+              </h2>
+              <p className="text-lg max-w-2xl mx-auto text-white/70">{t.landing.comparison.subtitle}</p>
+            </div>
+
+            <div className="oled-card rounded-3xl overflow-x-auto">
+              <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr] min-w-[560px] text-center">
+                <div />
+                <div className="py-5 px-3 border-b border-l border-white/5 bg-[#02c950]/10">
+                  <span className="text-[#02c950] font-bold text-base md:text-lg">Waler</span>
+                </div>
+                <div className="py-5 px-3 border-b border-l border-white/5">
+                  <span className="text-white/55 font-semibold text-sm md:text-base">{t.landing.comparison.competitorA}</span>
+                </div>
+                <div className="py-5 px-3 border-b border-l border-white/5">
+                  <span className="text-white/55 font-semibold text-sm md:text-base">{t.landing.comparison.competitorB}</span>
+                </div>
+
+                {t.landing.comparison.rows.map((row, i) => ({
+                  ...row,
+                  icon: [Clock, SlidersHorizontal, Eye][i],
+                })).map((row, i) => (
+                  <Fragment key={i}>
+                    <div className="py-5 px-4 md:px-6 flex items-center gap-3 text-left border-t border-white/5">
+                      <row.icon className="w-4 h-4 md:w-5 md:h-5 text-white/40 shrink-0" />
+                      <span className="text-white/85 text-xs md:text-sm font-medium leading-tight">{row.label}</span>
+                    </div>
+                    <div className="py-5 px-3 border-t border-l border-white/5 bg-[#02c950]/5 flex items-center justify-center">
+                      {row.type === "boolean" ? (
+                        <Check className="w-5 h-5 text-[#02c950]" />
+                      ) : (
+                        <span className="text-[#02c950] font-bold text-xs md:text-sm">{row.waler}</span>
+                      )}
+                    </div>
+                    <div className="py-5 px-3 border-t border-l border-white/5 flex items-center justify-center">
+                      {row.type === "boolean" ? (
+                        <X className="w-5 h-5 text-white/25" />
+                      ) : (
+                        <span className="text-white/45 text-xs md:text-sm">{row.others}</span>
+                      )}
+                    </div>
+                    <div className="py-5 px-3 border-t border-l border-white/5 flex items-center justify-center">
+                      {row.type === "boolean" ? (
+                        <X className="w-5 h-5 text-white/25" />
+                      ) : (
+                        <span className="text-white/45 text-xs md:text-sm">{row.others}</span>
+                      )}
+                    </div>
+                  </Fragment>
+                ))}
+              </div>
             </div>
           </motion.div>
         </div>
