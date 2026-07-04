@@ -2,6 +2,7 @@ import { ArrowLeft, Trash, Zap, MessageCircle, Heart, Crown, Star, Eye, Flame, C
 import { useState } from "react";
 import { Person, ProspectStatus, Circle, isProspect, isInCircle, getEffectiveTemperature, getSettingPhaseLabel } from "./types";
 import { RadarBackground } from "@/components/RadarBackground";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { exportPersonToPDF } from "../../utils/pdfExport";
 import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 
@@ -168,7 +169,8 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
             </a>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher />
             <button
               onClick={() => {
                 const badges: string[] = [];
