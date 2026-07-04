@@ -1583,9 +1583,12 @@ export async function registerRoutes(
     });
 
     res.json({
-      // Real Instagram stats from database — compteur dérivé de la table followers
-      // (source de vérité) avec repli sur la colonne cache app_users.followers_count.
-      instagramFollowers: recentFollowers.length || user?.followersCount || 0,
+      // Real Instagram stats from database — `user.followersCount` (synchronisé à
+      // chaque scan via UPDATE_USER_INFO) est la source de vérité : la table
+      // `followers` est append-only (jamais purgée des départs avant la fix
+      // anti-dérive de /api/extension/verify-missing-followers) et peut dériver
+      // AU-DESSUS du total réel si des comptes partis ne sont jamais nettoyés.
+      instagramFollowers: user?.followersCount || recentFollowers.length || 0,
       instagramFollowing: user?.followingCount || 0,
       instagramPosts: user?.postsCount || 0,
       instagramBio: user?.bio || '',
@@ -2602,6 +2605,30 @@ export async function registerRoutes(
           await saveLost(missingUsernames, 'deleted', 'ghost');
           await saveLost(blockedUsernames, 'blocked', 'ghost');
           await saveLost(unfollowedUsernames, 'unfollowed', 'unfollow');
+
+          // ANTI-DÉRIVE (backend) : miroir de pruneFromDatabase côté extension.
+          // La table `followers` est append-only — sans ce nettoyage, elle ne
+          // reflète jamais les départs et gonfle indéfiniment (cause du
+          // dashboard affichant un total AU-DESSUS du vrai compte Instagram,
+          // ex. "221" alors que le compte réel est ~210). On retire les
+          // comptes CONFIRMÉS non-followers (comparaison insensible à la casse,
+          // les usernames peuvent différer en casse entre DOM/API).
+          const toPrune = [
+            ...(Array.isArray(unfollowedUsernames) ? unfollowedUsernames : []),
+            ...(Array.isArray(blockedUsernames) ? blockedUsernames : []),
+            ...(Array.isArray(missingUsernames) ? missingUsernames : []),
+          ].map((u: string) => String(u).toLowerCase());
+          if (toPrune.length > 0) {
+            try {
+              const pruneResult = await pgPool.query(
+                `DELETE FROM followers WHERE user_id = $1 AND LOWER(username) = ANY($2::text[])`,
+                [userId, toPrune]
+              );
+              console.log(`🧹 [Backend] ${pruneResult.rowCount ?? 0} compte(s) retiré(s) de followers (anti-dérive)`);
+            } catch (e) {
+              console.error("Error pruning followers table:", e);
+            }
+          }
         } finally {
           if (sqlite) {
             try { sqlite.close(); } catch { /* noop */ }
