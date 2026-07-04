@@ -37,6 +37,7 @@ export const en = {
       words: ["personal", "networker", "mentor", "professional", "closer"],
       subtitle:
         "Waler detects when someone close leaves your digital circle — and guides you through what it really means about you and your relationship.",
+      desktopOnly: "Desktop only — not available on mobile or tablet",
     },
     browserDemo: {
       steps: ["Scanning your followers", "Change detected", "Unfollower identified"],
@@ -52,7 +53,7 @@ export const en = {
       steps: [
         {
           title: "Connect",
-          desc: "Add the browser extension and stay logged into Instagram as usual. Waler reads only what you already see — never your password.",
+          desc: "Add the browser extension on your computer and stay logged into Instagram as usual. Waler reads only what you already see — never your password.",
         },
         {
           title: "Notice",
@@ -186,7 +187,7 @@ export const en = {
           tag: "SECURITY",
           title: "Account",
           titleHighlight: "Safety",
-          desc: "Waler runs in your own browser and never asks for your password or logs into your account. Your data is encrypted, and your account stays untouched — no intrusion, ever.",
+          desc: "Waler runs in your own browser and never asks for your password or logs into your account. Your data is encrypted, and your account stays untouched — no intrusion, ever. No AI is used or connected to your data: every analysis runs on our own deterministic algorithms, guaranteeing full security for your information.",
         },
       ],
     },
@@ -200,12 +201,20 @@ export const en = {
           a: "Yes. Waler never asks for your Instagram password and never logs into your account. It runs as a secure browser extension on your own device, reading only the information you can already see yourself, and your data is encrypted in transit and at rest.",
         },
         {
+          q: "Do you use AI on my data?",
+          a: "No, AI is not involved in any of our features. All of Waler's analysis (unfollow detection, relationship scoring, etc.) runs on our own deterministic algorithms — your data is never sent to any AI model, which guarantees complete security for your information.",
+        },
+        {
           q: "Do I need to provide my login credentials?",
           a: "Never. You stay logged into Instagram as usual — Waler's extension works inside your own browser and never sees or stores your password.",
         },
         {
           q: "How does the tracking work exactly?",
           a: "Waler's browser extension reads your follower list while you browse Instagram normally, then compares it over time. That's how it detects exactly who unfollowed you, who followed you, and which accounts were deactivated or deleted — without ever touching your password.",
+        },
+        {
+          q: "Does Waler work on mobile or tablet?",
+          a: "No. Waler is built exclusively for computers, as a browser extension (Chrome, Edge, Brave, etc.). There is no mobile app or tablet version, and we have no plans to bring Waler to other devices.",
         },
         {
           q: "Can I track multiple accounts?",
@@ -461,6 +470,10 @@ export const en = {
         },
       },
     },
+    errors: {
+      registrationFailed: "Registration failed",
+      genericError: "An error occurred during registration. Please try again.",
+    },
   },
   verification: {
     title: "Verify your account",
@@ -631,6 +644,10 @@ export const en = {
       selectYear: "Select Year",
     },
     errorLoading: "Error loading dashboard",
+    months: [
+      "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+      "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
+    ],
   },
   settingsModal: {
     title: "Settings",
@@ -1699,6 +1716,15 @@ export const en = {
     step3: "Results appear here automatically when ready",
     waiting: "Waiting for analysis results…",
     gotIt: "Got it",
+  },
+  errorBoundary: {
+    title: "Something went wrong",
+    description: "The app ran into an unexpected problem",
+    errorLabel: "Error",
+    unknownError: "An unknown error occurred",
+    tryAgain: "Try again",
+    backToHome: "Back to home",
+    contactSupport: "If the problem persists, contact technical support",
   },
 };
 

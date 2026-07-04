@@ -39,6 +39,7 @@ export const fr: Translations = {
       words: ["les particuliers", "les networkers", "les mentors", "les professionnels", "les closers"],
       subtitle:
         "Waler détecte quand une personne proche quitte votre cercle numérique — et vous aide à comprendre ce que cela révèle vraiment sur vous et votre relation.",
+      desktopOnly: "Uniquement sur ordinateur — non disponible sur mobile ou tablette",
     },
     browserDemo: {
       steps: ["Analyse de vos abonnés", "Changement détecté", "Désabonné identifié"],
@@ -54,7 +55,7 @@ export const fr: Translations = {
       steps: [
         {
           title: "Connectez-vous",
-          desc: "Installez l'extension de navigateur et restez connecté à Instagram comme d'habitude. Waler ne lit que ce que vous voyez déjà — jamais votre mot de passe.",
+          desc: "Installez l'extension de navigateur sur votre ordinateur et restez connecté à Instagram comme d'habitude. Waler ne lit que ce que vous voyez déjà — jamais votre mot de passe.",
         },
         {
           title: "Remarquez",
@@ -188,7 +189,7 @@ export const fr: Translations = {
           tag: "SÉCURITÉ",
           title: "Sécurité",
           titleHighlight: "de votre compte",
-          desc: "Waler fonctionne directement dans votre navigateur et ne demande jamais votre mot de passe, ni ne se connecte à votre compte. Vos données sont chiffrées, et votre compte reste intact — aucune intrusion, jamais.",
+          desc: "Waler fonctionne directement dans votre navigateur et ne demande jamais votre mot de passe, ni ne se connecte à votre compte. Vos données sont chiffrées, et votre compte reste intact — aucune intrusion, jamais. Aucune intelligence artificielle n'est utilisée ni connectée à vos données : chaque analyse repose sur nos propres algorithmes déterministes, ce qui garantit une sécurité totale de vos informations.",
         },
       ],
     },
@@ -202,12 +203,20 @@ export const fr: Translations = {
           a: "Oui. Waler ne demande jamais votre mot de passe Instagram et ne se connecte jamais à votre compte. Il fonctionne comme une extension de navigateur sécurisée sur votre propre appareil, ne lisant que les informations que vous pouvez déjà voir vous-même, et vos données sont chiffrées en transit et au repos.",
         },
         {
+          q: "Utilisez-vous l'intelligence artificielle sur mes données ?",
+          a: "Non, aucune IA n'intervient dans nos fonctionnalités. Toutes les analyses de Waler (détection des désabonnements, score de relation, etc.) reposent sur nos propres algorithmes déterministes — vos données ne sont jamais envoyées à un modèle d'intelligence artificielle, ce qui garantit une sécurité totale de vos informations.",
+        },
+        {
           q: "Dois-je fournir mes identifiants de connexion ?",
           a: "Jamais. Vous restez connecté à Instagram comme d'habitude — l'extension Waler fonctionne dans votre propre navigateur et ne voit ni ne stocke jamais votre mot de passe.",
         },
         {
           q: "Comment fonctionne exactement le suivi ?",
           a: "L'extension Waler lit votre liste d'abonnés pendant que vous naviguez normalement sur Instagram, puis la compare dans le temps. C'est ainsi qu'elle détecte précisément qui s'est désabonné, qui s'est abonné, et quels comptes ont été désactivés ou supprimés — sans jamais toucher à votre mot de passe.",
+        },
+        {
+          q: "Waler fonctionne-t-il sur mobile ou tablette ?",
+          a: "Non. Waler est conçu exclusivement pour ordinateur, sous forme d'extension de navigateur (Chrome, Edge, Brave, etc.). Il n'existe pas d'application mobile ni de version tablette, et nous ne prévoyons pas de porter Waler sur d'autres appareils.",
         },
         {
           q: "Puis-je suivre plusieurs comptes ?",
@@ -463,6 +472,10 @@ export const fr: Translations = {
         },
       },
     },
+    errors: {
+      registrationFailed: "Échec de l'inscription",
+      genericError: "Une erreur est survenue lors de l'inscription. Veuillez réessayer.",
+    },
   },
   verification: {
     title: "Vérifiez votre compte",
@@ -633,6 +646,10 @@ export const fr: Translations = {
       selectYear: "Sélectionner une année",
     },
     errorLoading: "Erreur lors du chargement du tableau de bord",
+    months: [
+      "JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN",
+      "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE",
+    ],
   },
   settingsModal: {
     title: "Paramètres",
@@ -1701,5 +1718,14 @@ export const fr: Translations = {
     step3: "Les résultats apparaissent ici automatiquement une fois prêts",
     waiting: "En attente des résultats de l'analyse…",
     gotIt: "Compris",
+  },
+  errorBoundary: {
+    title: "Une erreur est survenue",
+    description: "L'application a rencontré un problème inattendu",
+    errorLabel: "Erreur",
+    unknownError: "Une erreur inconnue s'est produite",
+    tryAgain: "Réessayer",
+    backToHome: "Retour à l'accueil",
+    contactSupport: "Si le problème persiste, contactez le support technique",
   },
 };

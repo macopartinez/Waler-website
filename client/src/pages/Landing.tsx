@@ -2,7 +2,7 @@ import { RadarBackground } from "@/components/RadarBackground";
 import { BackgroundWaler } from "@/components/BackgroundWaler";
 import { NavBar } from "@/components/NavBar";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChart3, ShieldCheck, Zap, Eye, Search, Lock, ChevronDown, ArrowRight, Users, Heart, TrendingDown, Shield, Star, User, Crown, Target, TrendingUp, Network, MessageCircle, Activity, Clock, Link, UserPlus, Sparkles, Flame, Repeat, Check, UserMinus, SlidersHorizontal, X } from "lucide-react";
+import { BarChart3, ShieldCheck, Zap, Eye, Search, Lock, ChevronDown, ArrowRight, Users, Heart, TrendingDown, Shield, Star, User, Crown, Target, TrendingUp, Network, MessageCircle, Activity, Clock, Link, UserPlus, Sparkles, Flame, Repeat, Check, UserMinus, SlidersHorizontal, X, Monitor } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { AnalyticsPreview } from "@/components/AnalyticsPreview";
@@ -231,9 +231,13 @@ export default function Landing() {
                 </AnimatePresence>
               </span>
             </h1>
-            <p className="text-xl md:text-2xl text-gray-400 mb-12 max-w-3xl mx-auto leading-relaxed font-medium">
+            <p className="text-xl md:text-2xl text-gray-400 mb-6 max-w-3xl mx-auto leading-relaxed font-medium">
               {t.landing.hero.subtitle}
             </p>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white/70" data-testid="badge-desktop-only">
+              <Monitor className="w-4 h-4 text-[#02c950]" />
+              {t.landing.hero.desktopOnly}
+            </div>
           </div>
         </div>
       </section>
