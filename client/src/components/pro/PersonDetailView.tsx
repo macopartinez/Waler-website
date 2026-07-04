@@ -212,6 +212,23 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                     postUrl: entry.postUrl,
                     ruptureBefore: entry.gapBefore,
                   })),
+                  labels: {
+                    statistics: t.personDetailView.pdfExport.statistics,
+                    statConnection: t.personDetailView.pdfExport.statConnection,
+                    statDuration: t.personDetailView.pdfExport.statDuration,
+                    statDurationHint: t.personDetailView.pdfExport.statDurationHint,
+                    statMutual: t.personDetailView.connection.mutual,
+                    statMutualHint: t.personDetailView.stats.inCommon,
+                    statSignals: t.personDetailView.pdfExport.statSignals,
+                    statSignalsHint: t.personDetailView.pdfExport.statSignalsHint,
+                    addedOnSimple: (date: string) => interpolate(t.personDetailView.pdfExport.addedOnSimple, { date }),
+                    interactionTimeline: t.personDetailView.interactionTimeline,
+                    noInteractionYet: t.personDetailView.pdfExport.noInteractionYetPeriod,
+                    breakBefore: (count: number) => interpolate(t.personDetailView.break, { count }),
+                    notesTitle: t.personDetailView.notes.title,
+                    noNotesYet: t.personDetailView.notes.noNotesYet,
+                    generatedBy: (date: string) => interpolate(t.common.pdfExport.generatedBy, { date }),
+                  },
                 });
               }}
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold hover:shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all flex items-center gap-2"
@@ -699,17 +716,17 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                   const ruptured = showRail && idx > 0 && entry.gapBefore > 0;
                   const label =
                     entry.liked && entry.commented
-                      ? 'Liked and commented on a post'
+                      ? t.personDetailView.pdfExport.likedAndCommented
                       : entry.liked
-                      ? 'Liked one of your posts'
-                      : 'Commented on one of your posts';
+                      ? t.personDetailView.pdfExport.likedPost
+                      : t.personDetailView.pdfExport.commentedPost;
                   return (
                     <div key={entry.postId + '-' + idx}>
                       {/* Indication de rupture : la ligne se coupe */}
                       {ruptured && (
                         <div className="flex items-center gap-2 py-2 pl-0.5 text-xs text-orange-400">
                           <span className="inline-block w-5 border-t border-dashed border-orange-400/60" />
-                          <span>Break — {entry.gapBefore} post(s) with no interaction</span>
+                          <span>{interpolate(t.personDetailView.break, { count: entry.gapBefore })}</span>
                         </div>
                       )}
                       <div className="flex items-stretch gap-3">
@@ -742,7 +759,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                               rel="noopener noreferrer"
                               className="text-xs text-green-400 hover:text-green-300 underline mt-1 inline-block break-all"
                             >
-                              View post →
+                              {t.personDetailView.viewPost}
                             </a>
                           )}
                         </div>
@@ -753,7 +770,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500">
-                {pattern.length > 0 ? 'No interaction of this type' : 'No interaction detected yet'}
+                {pattern.length > 0 ? t.personDetailView.noInteractionType : t.personDetailView.noInteractionYet}
               </div>
             )}
           </div>
@@ -762,7 +779,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
         {/* Change Circle (for connections) */}
         {isInCircle(person) && (
           <div className="mb-6">
-            <h3 className="text-xl font-bold text-white mb-4">Change circle</h3>
+            <h3 className="text-xl font-bold text-white mb-4">{t.personDetailView.changeCircle}</h3>
             <div className="grid grid-cols-3 gap-3">
               {(['vip', 'keep', 'watch'] as Circle[]).map((c) => {
                 const config = getCircleConfig(c);
@@ -795,7 +812,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
         {/* Change Status (for prospects) */}
         {isProspect(person) && (
           <div className="mb-6">
-            <h3 className="text-xl font-bold text-white mb-4">Change status</h3>
+            <h3 className="text-xl font-bold text-white mb-4">{t.personDetailView.changeStatus}</h3>
             <div className="flex flex-wrap gap-2 mb-4">
               {(['cold', 'warm', 'hot', 'converted', 'lost'] as ProspectStatus[]).map((status) => (
                 <button
@@ -817,10 +834,10 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                     {status === 'cold' && <Snowflake className="w-4 h-4" />}
                     {status === 'converted' && <CheckCircle className="w-4 h-4" />}
                     {status === 'lost' && <AlertCircle className="w-4 h-4" />}
-                    {status === 'hot' ? 'Hot' :
-                     status === 'warm' ? 'Warm' :
-                     status === 'cold' ? 'Cold' :
-                     status === 'converted' ? 'Converted' : 'Lost'}
+                    {status === 'hot' ? t.personBadges.hot :
+                     status === 'warm' ? t.personBadges.warm :
+                     status === 'cold' ? t.personBadges.cold :
+                     status === 'converted' ? t.personBadges.converted : t.personBadges.lost}
                   </span>
                 </button>
               ))}
@@ -830,7 +847,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                 onClick={toggleConversion}
                 className="w-full px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 transition-all font-semibold"
               >
-                Mark as converted
+                {t.personDetailView.markAsConverted}
               </button>
             )}
           </div>
@@ -839,13 +856,13 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
         {/* Notes */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-white">Notes</h3>
+            <h3 className="text-xl font-bold text-white">{t.personDetailView.notes.title}</h3>
             {!isEditingNotes && (
               <button
                 onClick={() => setIsEditingNotes(true)}
                 className="text-sm text-green-400 hover:text-green-300 transition-colors"
               >
-                Edit
+                {t.personDetailView.notes.edit}
               </button>
             )}
           </div>
@@ -855,7 +872,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add your notes here..."
+                  placeholder={t.personDetailView.notes.placeholder}
                   className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-green-500 transition-colors resize-none"
                   rows={6}
                 />
@@ -864,7 +881,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                     onClick={saveNotes}
                     className="flex-1 px-4 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white font-medium transition-colors"
                   >
-                    Save
+                    {t.personDetailView.notes.save}
                   </button>
                   <button
                     onClick={() => {
@@ -873,13 +890,13 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                     }}
                     className="flex-1 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-colors"
                   >
-                    Cancel
+                    {t.personDetailView.notes.cancel}
                   </button>
                 </div>
               </div>
             ) : (
               <div className="text-sm text-gray-300 whitespace-pre-wrap">
-                {notes || <span className="text-gray-500 italic">No notes yet</span>}
+                {notes || <span className="text-gray-500 italic">{t.personDetailView.notes.noNotesYet}</span>}
               </div>
             )}
           </div>

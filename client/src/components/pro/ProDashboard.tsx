@@ -495,7 +495,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
       (p) => p.id !== personId && p.instagramUsername.toLowerCase() === newUsername.toLowerCase()
     );
     if (clash) {
-      alert(`@${newUsername} is already in your network.`);
+      alert(interpolate(t.proDashboard.errors.alreadyInNetwork, { username: newUsername }));
       return;
     }
 
@@ -714,28 +714,28 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
       lost: prospects.filter(p => p.prospectStatus === 'lost').length,
     };
 
-    const circleLabel: Record<Circle, string> = { vip: 'VIP', keep: 'To keep', watch: 'To watch' };
+    const circleLabel: Record<Circle, string> = { vip: t.personBadges.vip, keep: t.personBadges.keep, watch: t.personBadges.watch };
     const statusLabel: Record<ProspectStatus, string> = {
-      hot: 'Hot', warm: 'Warm', cold: 'Cold', converted: 'Converted', lost: 'Lost',
+      hot: t.personBadges.hot, warm: t.personBadges.warm, cold: t.personBadges.cold, converted: t.personBadges.converted, lost: t.personBadges.lost,
     };
     const filterLabel: Record<'all' | PersonTag, string> = {
-      all: 'All', prospect: 'Prospects', vip: 'VIP', keep: 'To keep',
-      watch: 'To watch', converted: 'Converted',
+      all: t.proDashboard.filters.all, prospect: t.proDashboard.filters.prospectsFilter, vip: t.personBadges.vip, keep: t.personBadges.keep,
+      watch: t.personBadges.watch, converted: t.personBadges.converted,
     };
 
     const rows = source.map((p) => {
       const types: string[] = [];
-      if (isProspect(p)) types.push('Prospect');
+      if (isProspect(p)) types.push(t.personBadges.prospect);
       if (isInCircle(p) && p.circle) types.push(circleLabel[p.circle]);
 
       const statusParts: string[] = [];
       if (p.prospectStatus) statusParts.push(statusLabel[p.prospectStatus]);
-      if (p.converted) statusParts.push('Converted');
+      if (p.converted) statusParts.push(t.personBadges.converted);
 
       const connection =
-        p.followsYou && p.youFollow ? 'Mutual' :
-        p.followsYou ? 'Follows you' :
-        p.youFollow ? 'You follow' : 'None';
+        p.followsYou && p.youFollow ? t.personDetailView.connection.mutual :
+        p.followsYou ? t.personDetailView.connection.followsYou :
+        p.youFollow ? t.personDetailView.connection.youFollow : t.personDetailView.connection.none;
 
       return {
         displayName: p.displayName,
@@ -762,6 +762,35 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
       },
       prospectsByStatus,
       rows,
+      labels: {
+        subtitleLine: (filter: string, count: number, date: string) => interpolate(t.proDashboard.pdfExport.subtitleLine, { filter, count, date }),
+        overview: t.proDashboard.pdfExport.overview,
+        totalPeopleLabel: t.proDashboard.stats.totalPeople,
+        prospectsLabel: t.proDashboard.stats.prospects,
+        convertedHint: (count: number, rate: number) => interpolate(t.proDashboard.stats.convertedSuffix, { count, rate }),
+        averageScore: t.proDashboard.pdfExport.averageScore,
+        averageScoreHint: t.proDashboard.stats.prospects,
+        averageHealth: t.proDashboard.pdfExport.averageHealth,
+        averageHealthHint: t.proDashboard.stats.networkQuality,
+        breakdownByCircle: t.proDashboard.pdfExport.breakdownByCircle,
+        vipLabel: t.personBadges.vip,
+        circle1: t.proDashboard.pdfExport.circle1,
+        keepLabel: t.personBadges.keep,
+        circle2: t.proDashboard.pdfExport.circle2,
+        watchLabel: t.personBadges.watch,
+        circle3: t.proDashboard.pdfExport.circle3,
+        convertedLabel: t.personBadges.converted,
+        percentOfProspects: (rate: number) => interpolate(t.proDashboard.pdfExport.percentOfProspects, { rate }),
+        prospectsByStatus: t.proDashboard.pdfExport.prospectsByStatus,
+        hotLabel: t.personBadges.hot,
+        warmLabel: t.personBadges.warm,
+        coldLabel: t.personBadges.cold,
+        lostLabel: t.personBadges.lost,
+        peopleDetails: t.proDashboard.pdfExport.peopleDetails,
+        table: t.proDashboard.pdfExport.table,
+        noPeopleToDisplay: t.proDashboard.pdfExport.noPeopleToDisplay,
+        generatedBy: (date: string) => interpolate(t.common.pdfExport.generatedBy, { date }),
+      },
     });
   };
 

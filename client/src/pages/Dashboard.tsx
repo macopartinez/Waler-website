@@ -35,8 +35,6 @@ const SECTION_CONFIG = {
   blockers:    { label: "Ghosts", arcColor: "#ffffff", textColor: "text-gray-300"  },
 };
 
-const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
-
 const SPHERE_SIZE = 352;
 const WHITE_ARC_RADIUS = 148;
 const WHITE_ARC_STROKE = 14;
@@ -472,7 +470,7 @@ export default function Dashboard() {
         
         return {
           day: monthIdx + 1,
-          month: MONTHS[monthIdx].slice(0, 3),
+          month: t.dashboard.months[monthIdx].slice(0, 3),
           followers: monthFollowers,
           unfollowers: monthUnfollowers,
           blockers: monthBlockers
@@ -507,7 +505,7 @@ export default function Dashboard() {
         };
       });
     }
-  }, [stats, monthIndex, selectedYear, period]);
+  }, [stats, monthIndex, selectedYear, period, t]);
 
   // Calculer totalCount pour la section active (MUST BE BEFORE EARLY RETURNS)
   // Pour les followers: toujours le total global
@@ -949,7 +947,7 @@ export default function Dashboard() {
                   onClick={() => setShowMonthPicker(true)}
                   className="text-xs font-bold bg-white/10 px-3 py-1 rounded-full border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
                 >
-                  {MONTHS[monthIndex]}
+                  {t.dashboard.months[monthIndex]}
                 </button>
               )}
               <button 
@@ -1056,7 +1054,7 @@ export default function Dashboard() {
               >
                 <div className="pt-3">
                   <div className="text-xs font-bold text-gray-400 mb-2">
-                    {sectionLabels[activeSection]} {period === "year" ? interpolate(t.dashboard.dayDetail.inMonth, { month: MONTHS[clickedDay - 1] }) : interpolate(t.dashboard.dayDetail.onDay, { day: clickedDay })}
+                    {sectionLabels[activeSection]} {period === "year" ? interpolate(t.dashboard.dayDetail.inMonth, { month: t.dashboard.months[clickedDay - 1] }) : interpolate(t.dashboard.dayDetail.onDay, { day: clickedDay })}
                   </div>
                   {dayAccounts.length === 0 ? (
                     <div className="text-xs text-gray-500">
@@ -1234,7 +1232,7 @@ export default function Dashboard() {
             >
               <h3 className="text-xl font-bold text-white mb-4">{t.dashboard.pickers.selectMonth}</h3>
               <div className="grid grid-cols-3 gap-3">
-                {MONTHS.map((month, index) => {
+                {t.dashboard.months.map((month, index) => {
                   const currentYear = new Date().getFullYear();
                   const currentMonth = new Date().getMonth();
                   const isFuture = selectedYear > currentYear || (selectedYear === currentYear && index > currentMonth);

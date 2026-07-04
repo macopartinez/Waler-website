@@ -188,7 +188,7 @@ export default function Onboard() {
       if (!response.ok) {
         const error = await response.json();
         console.error("Registration failed:", error);
-        alert(error.message || error.error || "Registration failed");
+        alert(error.message || error.error || t.onboard.errors.registrationFailed);
         setIsSubmitting(false);
         return;
       }
@@ -242,7 +242,7 @@ export default function Onboard() {
       }
     } catch (error) {
       console.error("Registration error:", error);
-      alert("An error occurred during registration. Please try again.");
+      alert(t.onboard.errors.genericError);
       setIsSubmitting(false);
     }
   };
