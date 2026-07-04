@@ -104,20 +104,30 @@ export class ConversationDynamicsAnalyzer {
     return dyn;
   }
 
-  /** Conseils d'action générés à partir de la dynamique (règles, FR). */
-  buildAdvice(dyn: ConversationDynamics): string[] {
+  /** Conseils d'action générés à partir de la dynamique (règles, EN/FR selon `lang`). */
+  buildAdvice(dyn: ConversationDynamics, lang: 'en' | 'fr' = 'en'): string[] {
     const tips: string[] = [];
+    const tr = (en: string, fr: string) => (lang === 'fr' ? fr : en);
 
     // Balle dans son camp : il a vu / on attend sa réponse.
     if (dyn.seenNotAnswered) {
-      tips.push('They saw your message without replying — follow up with a short, open question.');
+      tips.push(tr(
+        'They saw your message without replying — follow up with a short, open question.',
+        'Ton message a été vu sans réponse — relance avec une question courte et ouverte.'
+      ));
     } else if (dyn.lastMessageIsSent && (dyn.lastMessageAgeMs ?? 0) > 2 * DAY) {
-      tips.push('Your last message went unanswered — suggest a time slot or ask a simple question.');
+      tips.push(tr(
+        'Your last message went unanswered — suggest a time slot or ask a simple question.',
+        'Ton dernier message est resté sans réponse — propose un créneau ou pose une question simple.'
+      ));
     }
 
     // Balle dans TON camp : ne pas le laisser refroidir.
     if (!dyn.lastMessageIsSent) {
-      tips.push('They messaged last — reply quickly to keep the momentum.');
+      tips.push(tr(
+        'They messaged last — reply quickly to keep the momentum.',
+        'C\'est à toi de répondre — fais-le vite pour garder la dynamique.'
+      ));
     }
 
     // Momentum élevé : profiter du moment.
@@ -125,26 +135,41 @@ export class ConversationDynamicsAnalyzer {
       dyn.theirAvgResponseMs != null && dyn.theirAvgResponseMs < 1 * HOUR &&
       dyn.theirResponseRate >= 0.7 && dyn.temperature === 'hot'
     ) {
-      tips.push('High momentum: this is the right time to pitch your offer or a call.');
+      tips.push(tr(
+        'High momentum: this is the right time to pitch your offer or a call.',
+        'Momentum élevé : c\'est le bon moment pour proposer ton offre ou un appel.'
+      ));
     }
 
     // Réponses brèves : changer d'angle.
     if (dyn.briefReplyRatio > 0.6 && dyn.theirMsgCount >= 3) {
-      tips.push('Short replies: switch angles with a question that needs more than a yes/no.');
+      tips.push(tr(
+        'Short replies: switch angles with a question that needs more than a yes/no.',
+        'Réponses courtes : change d\'angle avec une question qui demande plus qu\'un oui/non.'
+      ));
     }
 
     // Refroidissement.
     if (dyn.temperature === 'cold' && (dyn.lastMessageAgeMs ?? 0) > 14 * DAY) {
-      tips.push('Conversation has cooled off: a light nudge (react to a story, short natural message).');
+      tips.push(tr(
+        'Conversation has cooled off: a light nudge (react to a story, short natural message).',
+        'La conversation s\'est refroidie : une relance légère (réagis à une story, message court et naturel).'
+      ));
     }
 
     // Cadence en baisse.
     if (dyn.cadenceTrend === 'down' && dyn.temperature !== 'cold') {
-      tips.push('Exchanges are slowing down — suggest a concrete next step before it fades.');
+      tips.push(tr(
+        'Exchanges are slowing down — suggest a concrete next step before it fades.',
+        'Les échanges ralentissent — propose une prochaine étape concrète avant que ça s\'éteigne.'
+      ));
     }
 
     if (tips.length === 0) {
-      tips.push('Stable relationship — keep in touch with a valuable message now and then.');
+      tips.push(tr(
+        'Stable relationship — keep in touch with a valuable message now and then.',
+        'Relation stable — garde le contact avec un message utile de temps en temps.'
+      ));
     }
     return tips;
   }
