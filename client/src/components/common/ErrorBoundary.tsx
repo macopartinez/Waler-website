@@ -3,6 +3,20 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { en } from '@/lib/i18n/en';
+import { fr } from '@/lib/i18n/fr';
+
+// ErrorBoundary est un composant classe monté potentiellement au-dessus (ou en
+// dehors) de <LanguageProvider> : impossible d'y appeler le hook useLanguage().
+// On lit donc directement la langue depuis localStorage (même clé que
+// LanguageContext.STORAGE_KEY) et on résout le dictionnaire correspondant.
+const LANGUAGE_STORAGE_KEY = 'waler_language';
+
+function getErrorBoundaryTranslations() {
+  if (typeof window === 'undefined') return en;
+  const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  return stored === 'fr' ? fr : en;
+}
 
 interface Props {
   children: ReactNode;
@@ -75,6 +89,8 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      const t = getErrorBoundaryTranslations();
+
       // Default error UI
       return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
@@ -83,9 +99,9 @@ export class ErrorBoundary extends Component<Props, State> {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="h-8 w-8 text-red-500" />
                 <div>
-                  <CardTitle className="text-2xl">Something went wrong</CardTitle>
+                  <CardTitle className="text-2xl">{t.errorBoundary.title}</CardTitle>
                   <CardDescription>
-                    The app ran into an unexpected problem
+                    {t.errorBoundary.description}
                   </CardDescription>
                 </div>
               </div>
@@ -93,9 +109,9 @@ export class ErrorBoundary extends Component<Props, State> {
             <CardContent className="space-y-4">
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
+                <AlertTitle>{t.errorBoundary.errorLabel}</AlertTitle>
                 <AlertDescription>
-                  {this.state.error?.message || 'An unknown error occurred'}
+                  {this.state.error?.message || t.errorBoundary.unknownError}
                 </AlertDescription>
               </Alert>
 
@@ -118,16 +134,16 @@ export class ErrorBoundary extends Component<Props, State> {
               <div className="flex gap-3">
                 <Button onClick={this.handleReset} className="flex-1">
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Try again
+                  {t.errorBoundary.tryAgain}
                 </Button>
                 <Button onClick={this.handleGoHome} variant="outline" className="flex-1">
                   <Home className="h-4 w-4 mr-2" />
-                  Back to home
+                  {t.errorBoundary.backToHome}
                 </Button>
               </div>
 
               <p className="text-sm text-muted-foreground text-center">
-                If the problem persists, contact technical support
+                {t.errorBoundary.contactSupport}
               </p>
             </CardContent>
           </Card>
