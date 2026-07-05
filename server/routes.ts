@@ -109,7 +109,9 @@ function computeRelationshipScore(sqlite: any, memberId: number): number {
   if (events.length > 3) score += 10; // bonus interactions variées
   for (const e of events) {
     if (e.event_type === 'unfollow') score -= 20;          // a unfollow
-    else if (e.event_type === 'ghost') score -= 25;        // bloqué / supprimé
+    else if (e.event_type === 'ghost') score -= 25;        // legacy : bloqué/supprimé fusionnés
+    else if (e.event_type === 'blocked') score -= 30;      // t'a bloqué (rupture forte)
+    else if (e.event_type === 'deleted') score -= 25;      // compte supprimé/désactivé
     else if (e.event_type === 'refollow') score += 15;     // s'est réabonné
     else if (e.event_type === 'follow' || e.event_type === 'follow_back') score += 10; // (re)follow
   }
@@ -118,7 +120,8 @@ function computeRelationshipScore(sqlite: any, memberId: number): number {
 }
 
 /**
- * Émet un "signal de relation" (follow / unfollow / ghost / refollow) sur la
+ * Émet un "signal de relation" (follow / unfollow / blocked / deleted / ghost /
+ * refollow) sur la
  * fiche Pro (circle_members) correspondant au username donné, puis recalcule son
  * score. No-op si la personne n'est pas suivie en Pro (aucun circle_member).
  *
@@ -130,7 +133,7 @@ function emitRelationshipSignal(
   sqlite: any,
   userId: number,
   username: string,
-  eventType: 'follow' | 'unfollow' | 'ghost' | 'refollow'
+  eventType: 'follow' | 'unfollow' | 'blocked' | 'deleted' | 'ghost' | 'refollow'
 ): void {
   try {
     const member = sqlite.prepare(
@@ -2293,16 +2296,20 @@ export async function registerRoutes(
       const commentsStmt = sqlite.prepare(
         `SELECT event_data, detected_at FROM timeline_events WHERE circle_member_id = ? AND event_type = 'comment' ORDER BY detected_at DESC LIMIT 20`
       );
-      // Signaux de relation (follow / unfollow / ghost / refollow) émis par le
-      // mode Base — affichés dans la timeline Pro.
+      // Signaux de relation (follow / unfollow / blocked / deleted / ghost /
+      // refollow) émis par le mode Base — affichés dans la timeline Pro.
+      // 'ghost' reste supporté pour les lignes historiques (avant la séparation
+      // bloqué/supprimé).
       const relationStmt = sqlite.prepare(
         `SELECT event_type, detected_at FROM timeline_events
-         WHERE circle_member_id = ? AND event_type IN ('follow','unfollow','ghost','refollow')
+         WHERE circle_member_id = ? AND event_type IN ('follow','unfollow','blocked','deleted','ghost','refollow')
          ORDER BY detected_at DESC LIMIT 20`
       );
       const RELATION_LABELS: Record<string, string> = {
         follow: 'Vous a suivi',
         unfollow: 'Vous a unfollow',
+        blocked: 'Vous a bloqué',
+        deleted: 'Compte supprimé ou désactivé',
         ghost: 'Est passé en ghost (bloqué/supprimé)',
         refollow: "S'est réabonné",
       };
@@ -2340,7 +2347,7 @@ export async function registerRoutes(
             };
           }),
           ...(relationStmt.all(m.id) as any[]).map((r) => ({
-            type: r.event_type as 'follow' | 'unfollow' | 'ghost' | 'refollow',
+            type: r.event_type as 'follow' | 'unfollow' | 'blocked' | 'deleted' | 'ghost' | 'refollow',
             timestamp: r.detected_at,
             description: RELATION_LABELS[r.event_type] || r.event_type,
             postUrl: null,
@@ -2554,7 +2561,7 @@ export async function registerRoutes(
           const saveLost = async (
             usernames: string[] | undefined,
             status: 'deleted' | 'blocked' | 'unfollowed',
-            signalType: 'unfollow' | 'ghost'
+            signalType: 'unfollow' | 'blocked' | 'deleted'
           ) => {
             if (!Array.isArray(usernames) || usernames.length === 0) return;
             let saved = 0;
@@ -2602,8 +2609,8 @@ export async function registerRoutes(
             console.log(`✅ Saved ${saved}/${usernames.length} ${status} accounts to PostgreSQL`);
           };
 
-          await saveLost(missingUsernames, 'deleted', 'ghost');
-          await saveLost(blockedUsernames, 'blocked', 'ghost');
+          await saveLost(missingUsernames, 'deleted', 'deleted');
+          await saveLost(blockedUsernames, 'blocked', 'blocked');
           await saveLost(unfollowedUsernames, 'unfollowed', 'unfollow');
 
           // ANTI-DÉRIVE (backend) : miroir de pruneFromDatabase côté extension.

@@ -1,4 +1,4 @@
-import { ArrowLeft, Trash, Zap, MessageCircle, Heart, Crown, Star, Eye, Flame, CheckCircle, AlertCircle, TrendingUp, TrendingDown, Thermometer, Snowflake, Calendar, Download, Clock, Target, Users, Pencil } from "lucide-react";
+import { ArrowLeft, Trash, Zap, MessageCircle, Heart, Crown, Star, Eye, Flame, CheckCircle, AlertCircle, TrendingUp, TrendingDown, Thermometer, Snowflake, Calendar, Download, Clock, Target, Users, Pencil, Ban } from "lucide-react";
 import { useState } from "react";
 import { Person, ProspectStatus, Circle, isProspect, isInCircle, getEffectiveTemperature, getSettingPhaseLabel } from "./types";
 import { RadarBackground } from "@/components/RadarBackground";
@@ -41,9 +41,11 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
   const pattern = person.engagementPattern || [];
   const signals = person.signals || [];
 
-  // Signaux de relation (follow / unfollow / ghost / refollow) issus du mode Base,
-  // du + récent au + ancien. Affichés au-dessus du streak d'engagement.
-  const RELATION_TYPES = ['follow', 'unfollow', 'ghost', 'refollow'] as const;
+  // Signaux de relation (follow / unfollow / blocked / deleted / ghost /
+  // refollow) issus du mode Base, du + récent au + ancien. Affichés au-dessus du
+  // streak d'engagement. 'ghost' reste géré pour les signaux historiques (avant
+  // la séparation bloqué/supprimé).
+  const RELATION_TYPES = ['follow', 'unfollow', 'blocked', 'deleted', 'ghost', 'refollow'] as const;
   const relationSignals = signals
     .filter((s) => (RELATION_TYPES as readonly string[]).includes(s.type))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -52,6 +54,8 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
     follow: { Icon: TrendingUp, color: 'text-green-400' },
     refollow: { Icon: TrendingUp, color: 'text-green-400' },
     unfollow: { Icon: TrendingDown, color: 'text-orange-400' },
+    blocked: { Icon: Ban, color: 'text-red-400' },
+    deleted: { Icon: Trash, color: 'text-red-400' },
     ghost: { Icon: AlertCircle, color: 'text-red-400' },
   };
 
