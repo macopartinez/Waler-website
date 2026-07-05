@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Waler - Instagram Analytics",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Track your Instagram followers, unfollowers, and engagement in real-time",
   "permissions": [
     "storage",

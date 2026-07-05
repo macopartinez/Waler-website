@@ -54,6 +54,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'sync-data') {
     console.log('⏰ Syncing data...');
+    await refreshProStatus();
     await syncManager.syncToServer();
   }
 });
@@ -80,6 +81,7 @@ chrome.runtime.onMessageExternal.addListener((message: any, sender: any, sendRes
             userId: message.userId,
             apiToken: message.token,
             lastSync: Date.now(),
+            subscriptionActive: data.subscriptionActive === true,
           });
         } else {
           throw new Error('Token validation failed');
@@ -582,6 +584,9 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: a
               analyzedPosts: message.analyzedPosts || [],
               engagers: message.engagers || [],
               mutuals: message.mutuals || [],
+              // Posts à liste de likers tronquée (plafond IG) : une People non vue
+              // sur ces posts est incertaine, pas un "n'a pas liké" fiable.
+              partialLikePosts: message.partialLikePosts || [],
               ownUsername: message.ownUsername || '',
             }),
           });
@@ -766,6 +771,52 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: a
         chrome.action.setBadgeText({ text: message.text });
         chrome.action.setBadgeBackgroundColor({ color: message.color || '#00FF00' });
         sendResponse({ success: true });
+        break;
+
+      case 'PRO_REQUEST_ATTENTION':
+        // L'analyse Pro attend une autorisation, mais l'onglet Instagram n'est
+        // peut-être pas au premier plan (l'utilisateur a changé d'onglet/fenêtre).
+        // On ramène l'onglet ET sa fenêtre au premier plan, on flashe le badge et
+        // on émet une notification système (visible même hors du navigateur).
+        try {
+          const attTab = sender?.tab;
+          if (attTab?.id != null) {
+            await chrome.tabs.update(attTab.id, { active: true });
+            if (attTab.windowId != null) {
+              await chrome.windows.update(attTab.windowId, { focused: true, drawAttention: true });
+            }
+          }
+          chrome.action.setBadgeText({ text: '❗' });
+          chrome.action.setBadgeBackgroundColor({ color: '#FF6B00' });
+          chrome.notifications.create('waler-pro-permission', {
+            type: 'basic',
+            iconUrl: 'icon.png',
+            title: 'Authorization needed',
+            message: message.reason || 'Waler needs your authorization to open a conversation.',
+            priority: 2,
+          });
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('PRO_REQUEST_ATTENTION error:', error);
+          sendResponse({ success: false, error: String(error) });
+        }
+        break;
+
+      case 'PRO_NOTIFY':
+        // Notification système générique pour l'analyse Pro (fin/refus/erreur),
+        // visible même si l'utilisateur n'est pas sur l'onglet Instagram.
+        try {
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icon.png',
+            title: message.title || 'Waler',
+            message: message.body || '',
+            priority: 1,
+          });
+          sendResponse({ success: true });
+        } catch (error) {
+          sendResponse({ success: false, error: String(error) });
+        }
         break;
 
       case 'CHECK_NOTIFICATIONS':
@@ -1397,7 +1448,11 @@ async function refreshProStatus(): Promise<boolean> {
     }
     const data = await response.json();
     const isPro = data.isPro === true;
-    await chrome.storage.local.set({ isPro, subscriptionTier: data.subscriptionTier ?? null });
+    await chrome.storage.local.set({
+      isPro,
+      subscriptionTier: data.subscriptionTier ?? null,
+      subscriptionActive: data.subscriptionActive === true,
+    });
     console.log(`✅ Statut Pro rafraîchi: isPro=${isPro} (tier: ${data.subscriptionTier ?? 'n/a'})`);
     return isPro;
   } catch (error) {

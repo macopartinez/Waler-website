@@ -52,9 +52,21 @@ const MAX_MUTUAL_MEMBERS = 50; // nb max de comptes en commun gardés par People
 export class ProEngagementCollector {
   private overlay: ScanOverlay;
   private running = false;
+  /** Arrêt global demandé (bouton d'arrêt du popup) — vérifié dans la boucle. */
+  private stopRequested = false;
 
   constructor(overlay: ScanOverlay) {
     this.overlay = overlay;
+  }
+
+  /** Arrêt demandé par l'utilisateur (bouton d'arrêt global). La boucle d'analyse
+   *  d'engagement s'arrête à la prochaine itération. */
+  requestStop(): void {
+    if (this.stopRequested) return;
+    this.stopRequested = true;
+    console.log('⏹ [ProEng] Arrêt demandé — interruption de l\'analyse d\'engagement.');
+    this.overlay.showError('Analysis stopped');
+    void this.clearState();
   }
 
   // ==================== État ====================
@@ -105,6 +117,7 @@ export class ProEngagementCollector {
     }
 
     console.log(`✨ [ProEng] Démarrage pour @${ownUsername} — ${targets.length} People`);
+    this.stopRequested = false; // réarmer pour une nouvelle analyse
     await this.setState({
       phase: 'run',
       ownUsername,
@@ -165,6 +178,9 @@ export class ProEngagementCollector {
     console.log(`✨ [ProEng] Analyse jusqu'à ${cap} post(s) (total≈${totalPosts})`);
 
     const processed = new Set<string>();
+    // Posts dont la liste des likers a été tronquée (plafond API/DOM) : une People
+    // non détectée sur ces posts est incertaine, pas un "n'a pas liké" fiable.
+    const partialLikePosts = new Set<string>();
     const collected: Record<string, CollectedPerson> = {};
     const ensure = (u: string): CollectedPerson => {
       if (!collected[u]) collected[u] = { likedPosts: [], comments: [] };
@@ -189,6 +205,10 @@ export class ProEngagementCollector {
 
     let stuckScrolls = 0;
     while (processed.size < cap && stuckScrolls < 6) {
+      if (this.stopRequested) {
+        console.log('⏹ [ProEng] Analyse interrompue (arrêt global).');
+        return;
+      }
       const next = this.findNextGridPost(processed);
       if (!next) {
         // Charger plus de vignettes.
@@ -226,7 +246,9 @@ export class ProEngagementCollector {
       }
 
       // 2. Likes (tous les likers ; on retient les People + on alimente l'agrégat).
-      const likers = await this.openAndCollectLikers(root, next.postId);
+      const { users: likers, total: likeTotal, truncated: likersTruncated } =
+        await this.openAndCollectLikers(root, next.postId);
+      if (likersTruncated) partialLikePosts.add(next.postId);
       let peopleLikes = 0;
       for (const u of likers) {
         trackEngager(u, next.postId, 'like');
@@ -237,9 +259,12 @@ export class ProEngagementCollector {
         }
       }
 
-      // Résumé visible : confirme que la vérification a bien eu lieu.
+      // Résumé visible : confirme que la vérification a bien eu lieu (et signale
+      // si la liste des likers était partielle).
       console.log(
-        `🔍 [ProEng] Post ${next.postId} : ${likers.length} liker(s) lus → ${peopleLikes} People ; ${peopleComments} commentaire(s) People`
+        `🔍 [ProEng] Post ${next.postId} : ${likers.length} liker(s) lus` +
+          (likersTruncated ? ` / ${likeTotal} affichés ⚠️ PARTIEL` : '') +
+          ` → ${peopleLikes} People ; ${peopleComments} commentaire(s) People`
       );
 
       // 3. Fermer la modale et passer au suivant.
@@ -258,7 +283,14 @@ export class ProEngagementCollector {
 
     // L'ordre d'analyse (du plus récent au plus ancien) sert au backend pour
     // calculer le "streak" de présence consécutive.
-    await this.finish(collected, Array.from(processed), engagersPayload, mutuals, state.ownUsername);
+    await this.finish(
+      collected,
+      Array.from(processed),
+      engagersPayload,
+      mutuals,
+      state.ownUsername,
+      Array.from(partialLikePosts)
+    );
   }
 
   /** Trouve la prochaine vignette de post non encore traitée dans la grille. */
@@ -390,19 +422,26 @@ export class ProEngagementCollector {
    *  A) clic direct sur le compteur de likes dans la modale (photos) ;
    *  B) "Voir les statistiques" → clic du compteur (reels, fallback DOM).
    */
-  private async openAndCollectLikers(root: HTMLElement, shortcode: string): Promise<string[]> {
+  private async openAndCollectLikers(
+    root: HTMLElement,
+    shortcode: string
+  ): Promise<{ users: string[]; total: number | null; truncated: boolean }> {
+    // Compteur affiché du post (lu tant que la modale est ouverte) → sert à
+    // détecter une liste de likers tronquée (voir finalizeLikers).
+    const total = this.extractLikeCount(root);
+
     // 0. API interne : likers via media_id calculé depuis le shortcode. Pas de
     //    clic → contourne le blocage des événements non "trusted" par IG.
     const apiUsers = await this.fetchLikersViaApi(shortcode);
     if (apiUsers) {
       console.log(`📋 [ProEng] (API) Liste des likers : ${apiUsers.length} username(s)`);
-      return apiUsers;
+      return this.finalizeLikers(apiUsers, total, shortcode);
     }
 
     // Post sans like ?
     if (/be the first to like|première personne|premier à aimer|soyez la première/i.test(root.textContent || '')) {
       console.log('ℹ️ [ProEng] Post sans like (0)');
-      return [];
+      return this.finalizeLikers([], total, shortcode);
     }
 
     // Chemin A : compteur directement cliquable dans la modale.
@@ -410,7 +449,7 @@ export class ProEngagementCollector {
     if (trigger) {
       console.log(`👆 [ProEng] Compteur de likes ("${(trigger.textContent || '').trim().slice(0, 20)}") → ouverture…`);
       const usersA = await this.clickAndReadLikers(trigger);
-      if (usersA) return usersA;
+      if (usersA) return this.finalizeLikers(usersA, total, shortcode);
       console.log('↪️ [ProEng] La liste des likers ne s\'est pas ouverte → tentative via "Voir les statistiques"');
     } else {
       console.log('↪️ [ProEng] Compteur introuvable dans la modale → tentative via "Voir les statistiques"');
@@ -422,7 +461,7 @@ export class ProEngagementCollector {
     const went = await this.openInsights();
     if (!went) {
       console.log('⚠️ [ProEng] "Voir les statistiques" indisponible — likes non récupérés');
-      return [];
+      return this.finalizeLikers([], total, shortcode);
     }
     await this.sleep(1500);
     // La vue statistiques (/insights/media/…) est une page (pas une modale) :
@@ -447,7 +486,67 @@ export class ProEngagementCollector {
 
     // Quitter la vue statistiques (X en haut à gauche) pour revenir à la grille.
     await this.closeInsightsView();
-    return users;
+    return this.finalizeLikers(users, total, shortcode);
+  }
+
+  /**
+   * Compare la liste de likers réellement collectée au compteur affiché du post
+   * et marque la liste comme PARTIELLE si on en a lu nettement moins.
+   *
+   * Pourquoi : l'endpoint API `/likers/` d'Instagram est plafonné (~1000) et ne
+   * pagine pas ; le fallback DOM est borné (~500-700). Sur un post à plusieurs
+   * milliers de likes, un People réellement présent peut être absent de la liste
+   * tronquée → un "pas détecté" ne veut PAS dire "n'a pas liké". Ce flag permet
+   * au backend/à l'UI de ne pas transformer cette absence en certitude.
+   */
+  private finalizeLikers(
+    users: string[],
+    total: number | null,
+    postId: string
+  ): { users: string[]; total: number | null; truncated: boolean } {
+    // Tolérance : les compteurs abrégés (ex "1.2K") et les petits décalages
+    // (comptes désactivés entre le compteur et la lecture) rendent l'égalité
+    // stricte trop bruyante. On ne signale que les écarts nets.
+    const truncated =
+      total != null && total > 0 && users.length < total * 0.9 && total - users.length > 5;
+    if (truncated) {
+      console.warn(
+        `✂️ [ProEng] Post ${postId} : liste des likers PARTIELLE — ${users.length} lus / ${total} affichés. ` +
+          'Un People absent de cette liste peut être un faux négatif.'
+      );
+    }
+    return { users, total, truncated };
+  }
+
+  /**
+   * Lit le nombre de likes AFFICHÉ sur le post (compteur de la modale), en
+   * gérant les formats EN/FR et abrégés : "1,234", "1 234", "1.2K", "1,2 M".
+   * Renvoie null si illisible (on ne peut alors pas juger de la troncature).
+   */
+  private extractLikeCount(root: HTMLElement): number | null {
+    const trigger = this.findLikesTrigger(root);
+    if (!trigger) return null;
+    // Premier motif numérique du texte (ex: "1,234 likes", "1.2K", "1 234 j'aime").
+    const m = (trigger.textContent || '').trim().match(/\d[\d.,\s]*[KkMm]?/);
+    return m ? this.parseCountText(m[0]) : null;
+  }
+
+  /** Parse un compteur textuel ("1,234", "1 234", "1.2K", "1,2M") en entier. */
+  private parseCountText(text: string): number | null {
+    const t = text.trim().replace(/\s/g, '');
+    const m = t.match(/^([\d.,]+)([KkMm])?$/);
+    if (!m) return null;
+    const suffix = m[2]?.toLowerCase();
+    if (suffix) {
+      // Abrégé : le séparateur est décimal ("1,2K" = "1.2K" = 1200).
+      const val = parseFloat(m[1].replace(',', '.'));
+      if (isNaN(val)) return null;
+      return Math.round(val * (suffix === 'k' ? 1000 : 1_000_000));
+    }
+    // Exact : les séparateurs sont des milliers ("1,234" / "1.234" / "1 234").
+    const digits = m[1].replace(/[.,]/g, '');
+    const val = parseInt(digits, 10);
+    return isNaN(val) ? null : val;
   }
 
   /**
@@ -881,7 +980,8 @@ export class ProEngagementCollector {
     analyzedPosts: string[],
     engagers: Array<{ username: string; posts: number; liked: boolean; commented: boolean }>,
     mutuals: Array<{ username: string; count: number; members: string[] }>,
-    ownUsername: string
+    ownUsername: string,
+    partialLikePosts: string[]
   ): Promise<void> {
     this.overlay.show('Updating stats…');
     const postsAnalyzed = analyzedPosts.length;
@@ -907,6 +1007,9 @@ export class ProEngagementCollector {
         analyzedPosts,
         engagers,
         mutuals,
+        // Posts dont la liste des likers était tronquée (plafond IG) : le backend
+        // ne doit pas en déduire qu'une People "n'a pas liké" avec certitude.
+        partialLikePosts,
         // Compte RÉELLEMENT analysé (profil scanné) → le backend attribue
         // l'engagement à ce compte, pas au compte actif de la session.
         ownUsername,
@@ -914,8 +1017,10 @@ export class ProEngagementCollector {
       if (resp?.success) {
         const totalLikes = engagements.reduce((s, e) => s + e.likedPosts.length, 0);
         const totalComments = engagements.reduce((s, e) => s + e.comments.length, 0);
+        const partialNote =
+          partialLikePosts.length > 0 ? ` (${partialLikePosts.length} post(s) à liste partielle)` : '';
         this.overlay.showSuccess(
-          `Analysis complete! ${totalLikes} like(s) + ${totalComments} comment(s) across ${postsAnalyzed} posts · ${engagers.length} suggestion(s)`
+          `Analysis complete! ${totalLikes} like(s) + ${totalComments} comment(s) across ${postsAnalyzed} posts · ${engagers.length} suggestion(s)${partialNote}`
         );
       } else {
         this.overlay.showError(`Save failed: ${resp?.error || 'unknown'}`);

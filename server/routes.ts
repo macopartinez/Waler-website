@@ -7,7 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import { encryptField, decryptField, decryptMessageRow } from "./crypto-fields";
-import { loginSchema, registerSchema, verifyCodeSchema, unfollowers, blockers, users, subscriptions, planChangeHistory, followers as followersTable, agentStates } from "@shared/schema";
+import { loginSchema, registerSchema, verifyCodeSchema, unfollowers, blockers, users, planChangeHistory, followers as followersTable, agentStates } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -26,10 +26,10 @@ import {
   findOrCreateLinkedAccount
 } from "./auth";
 import { maxAccountsForTier } from "@shared/accounts";
-import { requireAuth, requireOwnership, rateLimit, requireVerified, requireAdmin, getLoginLockout, recordFailedLogin, clearLoginAttempts } from "./middleware";
+import { requireAuth, requireOwnership, rateLimit, requireVerified, requireAdmin, requireActiveSubscription, getLoginLockout, recordFailedLogin, clearLoginAttempts } from "./middleware";
 import { createVerification, verifyToken, resendVerificationCode } from "./verification";
 import { createCheckoutSession, createCustomerPortal, constructWebhookEvent, stripe } from "./stripe";
-import { getActivePlans, getUserPlan, getPlanById, getPlanByName, upsertSubscription, seedPlans } from "./plans";
+import { getActivePlans, getUserPlan, getPlanById, getPlanByName, upsertSubscription } from "./plans";
 import { createVerificationCode } from './verification-codes';
 import type Stripe from "stripe";
 import fs from 'fs';
@@ -79,6 +79,26 @@ function ensureWalerUserId(sqlite: any, username: string): number {
 }
 
 /**
+ * Convertit un timestamp Stripe (secondes epoch) en Date, ou undefined si
+ * absent/invalide. Sans cette garde, `new Date(undefined * 1000)` produit une
+ * date invalide qui fait planter Drizzle (`toISOString` → RangeError).
+ */
+function stripeTs(sec: number | null | undefined): Date | undefined {
+  if (!sec) return undefined;
+  const d = new Date(sec * 1000);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+/**
+ * Lit `current_period_end` de façon robuste aux versions d'API Stripe : dans les
+ * versions récentes (celle du compte) le champ a migré de la racine de la
+ * subscription vers le premier item. On lit les deux emplacements.
+ */
+function subscriptionPeriodEnd(sub: any): Date | undefined {
+  return stripeTs(sub?.current_period_end ?? sub?.items?.data?.[0]?.current_period_end);
+}
+
+/**
  * Calcule le score de relation (0-100) d'un membre du cercle à partir de ses
  * stats et de sa timeline. Portage de calculate_relationship_score() de
  * l'ancien agent Python (agent_pro_circle.py).
@@ -109,7 +129,9 @@ function computeRelationshipScore(sqlite: any, memberId: number): number {
   if (events.length > 3) score += 10; // bonus interactions variées
   for (const e of events) {
     if (e.event_type === 'unfollow') score -= 20;          // a unfollow
-    else if (e.event_type === 'ghost') score -= 25;        // bloqué / supprimé
+    else if (e.event_type === 'ghost') score -= 25;        // legacy : bloqué/supprimé fusionnés
+    else if (e.event_type === 'blocked') score -= 30;      // t'a bloqué (rupture forte)
+    else if (e.event_type === 'deleted') score -= 25;      // compte supprimé/désactivé
     else if (e.event_type === 'refollow') score += 15;     // s'est réabonné
     else if (e.event_type === 'follow' || e.event_type === 'follow_back') score += 10; // (re)follow
   }
@@ -118,7 +140,8 @@ function computeRelationshipScore(sqlite: any, memberId: number): number {
 }
 
 /**
- * Émet un "signal de relation" (follow / unfollow / ghost / refollow) sur la
+ * Émet un "signal de relation" (follow / unfollow / blocked / deleted / ghost /
+ * refollow) sur la
  * fiche Pro (circle_members) correspondant au username donné, puis recalcule son
  * score. No-op si la personne n'est pas suivie en Pro (aucun circle_member).
  *
@@ -130,7 +153,7 @@ function emitRelationshipSignal(
   sqlite: any,
   userId: number,
   username: string,
-  eventType: 'follow' | 'unfollow' | 'ghost' | 'refollow'
+  eventType: 'follow' | 'unfollow' | 'blocked' | 'deleted' | 'ghost' | 'refollow'
 ): void {
   try {
     const member = sqlite.prepare(
@@ -166,10 +189,6 @@ export async function registerRoutes(
   pgPool?: any
 ): Promise<Server> {
   
-  // Initialize plans in database
-  // TODO: Uncomment after running db:push
-  // await seedPlans();
-
   // Migration idempotente : colonne recovered_at (re-follow détecté). On conserve
   // la ligne d'unfollow/ghost pour l'affichage mais on l'exclut du compteur.
   if (pgPool) {
@@ -570,6 +589,94 @@ export async function registerRoutes(
     }
   });
 
+  // Réinitialise le compte : supprime tous les comptes Instagram LIÉS (et leurs
+  // données) et purge les données du compte PRINCIPAL (login/abonnement
+  // conservés). Confirmation obligatoire par saisie exacte du username du login.
+  app.post("/api/accounts/reset", requireAuth, async (req, res) => {
+    try {
+      const ownerId = getCurrentUser(req);
+      if (!ownerId) return res.status(401).json({ message: "Non authentifié" });
+
+      const owner = await getUserById(ownerId);
+      if (!owner) return res.status(404).json({ message: "Utilisateur non trouvé" });
+
+      const confirmUsername = typeof req.body?.confirmUsername === "string" ? req.body.confirmUsername.trim() : "";
+      if (!confirmUsername || confirmUsername.toLowerCase() !== owner.username.toLowerCase()) {
+        return res.status(400).json({ message: "Confirmation invalide : le nom d'utilisateur ne correspond pas." });
+      }
+
+      const accounts = await getAccountsForOwner(ownerId);
+      const dbPath = path.join(moduleDir, "waler.db");
+      const sqlite = new Database(dbPath);
+
+      const purgeWalerData = (username: string) => {
+        const walerUserId = resolveWalerUserId(sqlite, username);
+        if (!walerUserId) return;
+        try {
+          sqlite.prepare(`
+            DELETE FROM liked_posts WHERE circle_member_id IN
+              (SELECT id FROM circle_members WHERE user_id = ?)
+          `).run(walerUserId);
+          sqlite.prepare(`
+            DELETE FROM timeline_events WHERE circle_member_id IN
+              (SELECT id FROM circle_members WHERE user_id = ?)
+          `).run(walerUserId);
+          sqlite.prepare(`DELETE FROM contact_scores WHERE user_id = ?`).run(walerUserId);
+          sqlite.prepare(`DELETE FROM circle_members WHERE user_id = ?`).run(walerUserId);
+          sqlite.prepare(`DELETE FROM users WHERE id = ?`).run(walerUserId);
+        } catch (e) {
+          console.error(`Reset: waler.db purge failed for @${username}:`, e);
+        }
+      };
+
+      // Chaque table est vidée indépendamment : certaines (ex. agent_states) du
+      // schéma Drizzle ne sont pas forcément provisionnées dans la base réelle
+      // (drift connu, cf. plans/subscriptions) — une table absente ne doit pas
+      // empêcher la purge des autres.
+      const safeDelete = async (label: string, fn: () => Promise<unknown>) => {
+        try {
+          await fn();
+        } catch (e) {
+          console.error(`Reset: purge ${label} failed:`, e);
+        }
+      };
+
+      for (const account of accounts) {
+        // Données Postgres scopées par compte (owner ET comptes liés).
+        await safeDelete("followers", () => db.delete(followersTable).where(eq(followersTable.userId, account.id)));
+        await safeDelete("unfollowers", () => db.delete(unfollowers).where(eq(unfollowers.userId, account.id)));
+        await safeDelete("blockers", () => db.delete(blockers).where(eq(blockers.userId, account.id)));
+        await safeDelete("agentStates", () => db.delete(agentStates).where(eq(agentStates.userId, account.id)));
+        purgeWalerData(account.username);
+
+        if (account.id !== ownerId) {
+          // Compte lié : on le retire complètement (jamais le principal).
+          await safeDelete("linked account row", () => db.delete(users).where(eq(users.id, account.id)));
+        }
+      }
+      sqlite.close();
+
+      // Le principal garde son login/abonnement mais ses compteurs d'analyse
+      // en cache sont remis à zéro (les vraies données viennent d'être purgées).
+      await db.update(users).set({
+        followersCount: null,
+        followingCount: null,
+        postsCount: null,
+        bio: null,
+        isPrivate: null,
+        analysisStatus: "pending",
+        lastAnalyzedAt: null,
+      }).where(eq(users.id, ownerId));
+
+      setActiveAccount(req, ownerId);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Reset account error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Get subscription status
   app.get("/api/subscription/status", async (req, res) => {
     const userId = getCurrentUser(req);
@@ -731,7 +838,7 @@ export async function registerRoutes(
       const tier = user?.subscriptionTier ?? null;
       const active =
         user?.subscriptionStatus === 'active' || user?.subscriptionStatus === 'trialing';
-      res.json({ success: true, subscriptionTier: tier, isPro: tier === 'pro' && active });
+      res.json({ success: true, subscriptionTier: tier, isPro: tier === 'pro' && active, subscriptionActive: active });
     } catch (err: any) {
       console.error("pro-status error:", err);
       res.status(500).json({ message: err.message });
@@ -1132,12 +1239,16 @@ export async function registerRoutes(
       // Allow lookup by planName + billingPeriod (used during onboarding).
       // 'premium' maps to the 'base' plan; 'pro' maps to 'pro'.
       let priceId = directPriceId;
+      let plan = null as Awaited<ReturnType<typeof getPlanByName>>;
       if (!priceId && planName) {
         const serverPlanName = planName === 'premium' ? 'base' : planName;
-        const plan = await getPlanByName(serverPlanName);
+        plan = await getPlanByName(serverPlanName);
         if (plan) {
           priceId = billingPeriod === 'yearly' ? plan.stripePriceIdYearly : plan.stripePriceIdMonthly;
         }
+      } else if (priceId) {
+        const allPlans = await getActivePlans();
+        plan = allPlans.find(p => p.stripePriceIdMonthly === priceId || p.stripePriceIdYearly === priceId) || null;
       }
 
       if (!priceId) {
@@ -1152,6 +1263,10 @@ export async function registerRoutes(
       // Récupérer customerId si existe
       const { subscription } = await getUserPlan(userId);
 
+      // L'essai gratuit n'est accordé qu'aux nouveaux abonnés (pas déjà de
+      // subscription Stripe) — évite de le réoffrir à chaque changement de plan.
+      const trialPeriodDays = !subscription?.stripeSubscriptionId ? plan?.trialDays : undefined;
+
       const session = await createCheckoutSession({
         userId,
         userEmail: user.email,
@@ -1159,6 +1274,7 @@ export async function registerRoutes(
         successUrl: `${process.env.CLIENT_URL || 'http://localhost:5000'}/dashboard/${userId}?checkout=success`,
         cancelUrl: `${process.env.CLIENT_URL || 'http://localhost:5000'}/pricing?checkout=canceled`,
         customerId: subscription?.stripeCustomerId || undefined,
+        trialPeriodDays,
       });
 
       res.json({ sessionId: session.id, url: session.url });
@@ -1177,23 +1293,98 @@ export async function registerRoutes(
       }
       
       const { subscription } = await getUserPlan(userId);
-      
+
       if (!subscription?.stripeCustomerId) {
         return res.status(400).json({ message: "Aucun abonnement actif" });
       }
-      
+
+      // Deep-link optionnel vers un écran précis du portail (carte, résiliation,
+      // changement de formule). On filtre pour n'accepter que les flux connus.
+      const allowedFlows = ['payment_method_update', 'subscription_cancel', 'subscription_update'] as const;
+      const requestedFlow = req.body?.flow;
+      const flow = allowedFlows.includes(requestedFlow) ? requestedFlow : undefined;
+
       const portalSession = await createCustomerPortal({
         customerId: subscription.stripeCustomerId,
         returnUrl: `${process.env.CLIENT_URL || 'http://localhost:5000'}/billing`,
+        flow,
+        subscriptionId: subscription.stripeSubscriptionId,
       });
-      
+
       res.json({ url: portalSession.url });
     } catch (err) {
       console.error("Portal error:", err);
       res.status(500).json({ message: "Erreur lors de la création du portail" });
     }
   });
-  
+
+  // Annuler l'abonnement (résiliation en fin de période — l'accès est conservé
+  // jusqu'à `current_period_end`). Alternative in-app au flux du portail Stripe.
+  app.post("/api/subscription/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUser(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Non authentifié" });
+      }
+
+      const { subscription } = await getUserPlan(userId);
+      if (!subscription?.stripeSubscriptionId) {
+        return res.status(400).json({ message: "Aucun abonnement actif" });
+      }
+
+      // Résiliation douce côté Stripe : cancel_at_period_end (pas de suppression
+      // immédiate). Le webhook customer.subscription.updated confirmera l'état,
+      // mais on persiste le flag tout de suite pour un retour UI immédiat.
+      await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+        cancel_at_period_end: true,
+      });
+
+      await db
+        .update(users)
+        .set({ cancelAtPeriodEnd: true })
+        .where(eq(users.id, userId));
+
+      res.json({
+        success: true,
+        cancelAtPeriodEnd: true,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+      });
+    } catch (err) {
+      console.error("Cancel subscription error:", err);
+      res.status(500).json({ message: "Erreur lors de l'annulation de l'abonnement" });
+    }
+  });
+
+  // Réactiver un abonnement résilié avant la fin de période (annule le
+  // cancel_at_period_end). Symétrique de /api/subscription/cancel.
+  app.post("/api/subscription/reactivate", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUser(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Non authentifié" });
+      }
+
+      const { subscription } = await getUserPlan(userId);
+      if (!subscription?.stripeSubscriptionId) {
+        return res.status(400).json({ message: "Aucun abonnement actif" });
+      }
+
+      await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+        cancel_at_period_end: false,
+      });
+
+      await db
+        .update(users)
+        .set({ cancelAtPeriodEnd: false })
+        .where(eq(users.id, userId));
+
+      res.json({ success: true, cancelAtPeriodEnd: false });
+    } catch (err) {
+      console.error("Reactivate subscription error:", err);
+      res.status(500).json({ message: "Erreur lors de la réactivation de l'abonnement" });
+    }
+  });
+
   // Stripe webhooks
   app.post("/api/webhooks/stripe", async (req, res) => {
     const signature = req.headers["stripe-signature"];
@@ -1203,157 +1394,120 @@ export async function registerRoutes(
     }
     
     try {
-      const event = constructWebhookEvent(req.body, signature);
-      
+      // Stripe exige le corps BRUT pour vérifier la signature. express.json()
+      // s'applique globalement mais capture le buffer d'origine dans req.rawBody
+      // (callback verify dans server/index.ts) — c'est lui qu'il faut passer, pas
+      // req.body (déjà parsé en objet, ce qui casse la vérification de signature).
+      const rawBody = (req as any).rawBody ?? req.body;
+      const event = constructWebhookEvent(rawBody as Buffer, signature);
+
       console.log(`Webhook received: ${event.type}`);
       
       switch (event.type) {
         case "checkout.session.completed": {
           const session = event.data.object as Stripe.Checkout.Session;
           const userId = parseInt(session.metadata?.userId || "0");
-          
+
           if (!userId || !session.subscription) break;
-          
-          // Récupérer la subscription Stripe pour obtenir le priceId
-          const stripeSubscription = session.subscription as string;
-          
-          // Récupérer tous les plans pour mapper le priceId
+
+          const stripeSubscriptionId = session.subscription as string;
+          // Récupérer la vraie subscription Stripe (statut réel — 'trialing' pendant
+          // l'essai gratuit, 'active' une fois facturée — et priceId).
+          const stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+
           const allPlans = await getActivePlans();
-          let planId: number | null = null;
-          
-          // Récupérer les line items pour obtenir le priceId
-          const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
-          const priceId = lineItems.data[0]?.price?.id;
-          
-          // Trouver le plan correspondant au priceId
-          for (const plan of allPlans) {
-            if (plan.stripePriceIdMonthly === priceId || plan.stripePriceIdYearly === priceId) {
-              planId = plan.id;
-              break;
-            }
-          }
-          
-          if (!planId) {
+          const priceId = stripeSubscription.items.data[0]?.price?.id;
+          const plan = allPlans.find(
+            (p) => p.stripePriceIdMonthly === priceId || p.stripePriceIdYearly === priceId
+          );
+
+          if (!plan) {
             console.error(`No plan found for priceId: ${priceId}`);
             break;
           }
-          
+
           await upsertSubscription({
             userId,
-            planId,
+            planId: plan.id,
             stripeCustomerId: session.customer as string,
-            stripeSubscriptionId: stripeSubscription,
-            status: "active",
+            stripeSubscriptionId,
+            status: stripeSubscription.status,
+            billingPeriod:
+              stripeSubscription.items.data[0]?.price?.recurring?.interval === "year"
+                ? "yearly"
+                : "monthly",
+            currentPeriodEnd: subscriptionPeriodEnd(stripeSubscription),
+            trialEndsAt: stripeTs(stripeSubscription.trial_end) ?? null,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
           });
-          
-          console.log(`✅ Subscription created for user ${userId}, plan ${planId}`);
+
+          console.log(`✅ Subscription ${stripeSubscription.status} for user ${userId}, plan ${plan.name}`);
 
           break;
         }
-        
+
         case "customer.subscription.updated": {
           const subscription = event.data.object as Stripe.Subscription;
-          console.log(`Subscription updated: ${subscription.id}`);
-          
-          // Récupérer l'utilisateur via le customerId
-          const [userSub] = await db
+          console.log(`Subscription updated: ${subscription.id} -> ${subscription.status}`);
+
+          const [user] = await db
             .select()
-            .from(subscriptions)
-            .where(eq(subscriptions.stripeCustomerId, subscription.customer as string));
-          
-          if (userSub) {
-            // Récupérer le nouveau plan basé sur le priceId
+            .from(users)
+            .where(eq(users.stripeCustomerId, subscription.customer as string));
+
+          if (user) {
             const priceId = subscription.items.data[0]?.price?.id;
             const allPlans = await getActivePlans();
-            let newPlanId: number | null = null;
-            
-            for (const plan of allPlans) {
-              if (plan.stripePriceIdMonthly === priceId || plan.stripePriceIdYearly === priceId) {
-                newPlanId = plan.id;
-                break;
-              }
-            }
-            
-            if (newPlanId && newPlanId !== userSub.planId) {
-              // Changement de plan détecté - utiliser le service de migration
-              const { changePlan } = await import("./plan-migration");
-              const result = await changePlan(userSub.userId, newPlanId, {
-                stripeCustomerId: subscription.customer as string,
-                stripeSubscriptionId: subscription.id,
-                billingPeriod: subscription.items.data[0]?.price?.recurring?.interval === 'year' ? 'yearly' : 'monthly',
-                currentPeriodStart: new Date((subscription as any).current_period_start * 1000),
-                currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
-              });
-              
-              console.log(`✅ Plan changed via webhook:`, result);
-            } else {
-              // Mise à jour simple (statut, dates, etc.)
-              await db
-                .update(subscriptions)
-                .set({
-                  status: subscription.status,
-                  currentPeriodStart: new Date((subscription as any).current_period_start * 1000),
-                  currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
-                  cancelAtPeriodEnd: subscription.cancel_at_period_end,
-                  updatedAt: new Date(),
-                })
-                .where(eq(subscriptions.id, userSub.id));
-              
-              console.log(`✅ Subscription status updated for user ${userSub.userId}`);
-            }
+            const plan = allPlans.find(
+              (p) => p.stripePriceIdMonthly === priceId || p.stripePriceIdYearly === priceId
+            );
+
+            await upsertSubscription({
+              userId: user.id,
+              planId: plan?.id ?? (user.subscriptionTier === "pro" ? 2 : 1),
+              stripeCustomerId: subscription.customer as string,
+              stripeSubscriptionId: subscription.id,
+              status: subscription.status,
+              billingPeriod:
+                subscription.items.data[0]?.price?.recurring?.interval === "year"
+                  ? "yearly"
+                  : "monthly",
+              currentPeriodEnd: subscriptionPeriodEnd(subscription),
+              trialEndsAt: stripeTs(subscription.trial_end) ?? null,
+              cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            });
+
+            console.log(`✅ Subscription status updated for user ${user.id}: ${subscription.status} (cancel_at_period_end=${subscription.cancel_at_period_end})`);
           }
           break;
         }
-        
+
         case "customer.subscription.deleted": {
           const subscription = event.data.object as Stripe.Subscription;
           console.log(`Subscription deleted: ${subscription.id}`);
-          
-          // Récupérer l'utilisateur
-          const [userSub] = await db
-            .select()
-            .from(subscriptions)
-            .where(eq(subscriptions.stripeSubscriptionId, subscription.id));
-          
-          if (userSub) {
-            // Utiliser le service de migration pour annuler (préserve les données)
-            const { cancelPlan } = await import("./plan-migration");
-            const result = await cancelPlan(userSub.userId);
-            console.log(`✅ Plan cancelled via webhook:`, result);
-          }
+
+          // Statut seulement — on ne supprime jamais les données utilisateur.
+          await db
+            .update(users)
+            .set({ subscriptionStatus: "cancelled" })
+            .where(eq(users.stripeSubscriptionId, subscription.id));
+
+          console.log(`✅ Subscription ${subscription.id} marked cancelled (data preserved)`);
           break;
         }
-        
+
         case "invoice.payment_failed": {
           const invoice = event.data.object as Stripe.Invoice;
           console.log(`Payment failed for invoice: ${invoice.id}`);
-          
-          // Mettre à jour le statut mais NE PAS supprimer les données
-          if ((invoice as any).subscription) {
-            const [userSub] = await db
-              .select()
-              .from(subscriptions)
-              .where(eq(subscriptions.stripeSubscriptionId, (invoice as any).subscription as string));
-            
-            if (userSub) {
-              await db
-                .update(subscriptions)
-                .set({
-                  status: 'past_due',
-                  updatedAt: new Date(),
-                })
-                .where(eq(subscriptions.id, userSub.id));
-              
-              // Mettre à jour le statut dans users aussi
-              await db
-                .update(users)
-                .set({
-                  subscriptionStatus: 'past_due',
-                })
-                .where(eq(users.id, userSub.userId));
-              
-              console.log(`⚠️ Payment failed for user ${userSub.userId} - status set to past_due (data preserved)`);
-            }
+
+          const failedSubscriptionId = (invoice as any).subscription as string | undefined;
+          if (failedSubscriptionId) {
+            await db
+              .update(users)
+              .set({ subscriptionStatus: "past_due" })
+              .where(eq(users.stripeSubscriptionId, failedSubscriptionId));
+
+            console.log(`⚠️ Payment failed for subscription ${failedSubscriptionId} - status set to past_due (data preserved)`);
           }
           break;
         }
@@ -1848,7 +2002,7 @@ export async function registerRoutes(
   // ==================== EXTENSION API ROUTES ====================
   
   // Sync data from extension
-  app.post("/api/extension/sync", requireAuth, async (req, res) => {
+  app.post("/api/extension/sync", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -1916,7 +2070,7 @@ export async function registerRoutes(
   });
 
   // Sync full database from extension
-  app.post("/api/extension/sync-full", requireAuth, async (req, res) => {
+  app.post("/api/extension/sync-full", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       // Cibler le compte envoyé par l'extension (accountId) plutôt que de faire
       // confiance à session.activeAccountId, qui peut être désaligné si la bascule
@@ -2047,7 +2201,7 @@ export async function registerRoutes(
 
   // Restauration : renvoie les followers du compte actif (depuis Postgres) pour
   // que l'extension reconstruise sa base locale sans re-scanner Instagram.
-  app.get("/api/extension/followers", requireAuth, async (req, res) => {
+  app.get("/api/extension/followers", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const ownerId = getCurrentUser(req);
       let userId = getActiveAccount(req);
@@ -2110,7 +2264,7 @@ export async function registerRoutes(
   });
 
   // Update user info from extension
-  app.post("/api/extension/update-user-info", requireAuth, async (req, res) => {
+  app.post("/api/extension/update-user-info", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -2141,7 +2295,7 @@ export async function registerRoutes(
 
   // Liste des "people" (circle_members) de l'utilisateur — utilisée par la
   // section Pro de l'extension pour savoir quelles conversations analyser.
-  app.get("/api/extension/people", requireAuth, async (req, res) => {
+  app.get("/api/extension/people", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const ownerId = getCurrentUser(req);
       let userId = getActiveAccount(req);
@@ -2293,16 +2447,20 @@ export async function registerRoutes(
       const commentsStmt = sqlite.prepare(
         `SELECT event_data, detected_at FROM timeline_events WHERE circle_member_id = ? AND event_type = 'comment' ORDER BY detected_at DESC LIMIT 20`
       );
-      // Signaux de relation (follow / unfollow / ghost / refollow) émis par le
-      // mode Base — affichés dans la timeline Pro.
+      // Signaux de relation (follow / unfollow / blocked / deleted / ghost /
+      // refollow) émis par le mode Base — affichés dans la timeline Pro.
+      // 'ghost' reste supporté pour les lignes historiques (avant la séparation
+      // bloqué/supprimé).
       const relationStmt = sqlite.prepare(
         `SELECT event_type, detected_at FROM timeline_events
-         WHERE circle_member_id = ? AND event_type IN ('follow','unfollow','ghost','refollow')
+         WHERE circle_member_id = ? AND event_type IN ('follow','unfollow','blocked','deleted','ghost','refollow')
          ORDER BY detected_at DESC LIMIT 20`
       );
       const RELATION_LABELS: Record<string, string> = {
         follow: 'Vous a suivi',
         unfollow: 'Vous a unfollow',
+        blocked: 'Vous a bloqué',
+        deleted: 'Compte supprimé ou désactivé',
         ghost: 'Est passé en ghost (bloqué/supprimé)',
         refollow: "S'est réabonné",
       };
@@ -2340,7 +2498,7 @@ export async function registerRoutes(
             };
           }),
           ...(relationStmt.all(m.id) as any[]).map((r) => ({
-            type: r.event_type as 'follow' | 'unfollow' | 'ghost' | 'refollow',
+            type: r.event_type as 'follow' | 'unfollow' | 'blocked' | 'deleted' | 'ghost' | 'refollow',
             timestamp: r.detected_at,
             description: RELATION_LABELS[r.event_type] || r.event_type,
             postUrl: null,
@@ -2526,7 +2684,7 @@ export async function registerRoutes(
   });
 
   // Verify missing followers (unfollowers not found on Instagram)
-  app.post("/api/extension/verify-missing-followers", requireAuth, async (req, res) => {
+  app.post("/api/extension/verify-missing-followers", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -2554,7 +2712,7 @@ export async function registerRoutes(
           const saveLost = async (
             usernames: string[] | undefined,
             status: 'deleted' | 'blocked' | 'unfollowed',
-            signalType: 'unfollow' | 'ghost'
+            signalType: 'unfollow' | 'blocked' | 'deleted'
           ) => {
             if (!Array.isArray(usernames) || usernames.length === 0) return;
             let saved = 0;
@@ -2602,8 +2760,8 @@ export async function registerRoutes(
             console.log(`✅ Saved ${saved}/${usernames.length} ${status} accounts to PostgreSQL`);
           };
 
-          await saveLost(missingUsernames, 'deleted', 'ghost');
-          await saveLost(blockedUsernames, 'blocked', 'ghost');
+          await saveLost(missingUsernames, 'deleted', 'deleted');
+          await saveLost(blockedUsernames, 'blocked', 'blocked');
           await saveLost(unfollowedUsernames, 'unfollowed', 'unfollow');
 
           // ANTI-DÉRIVE (backend) : miroir de pruneFromDatabase côté extension.
@@ -2649,7 +2807,7 @@ export async function registerRoutes(
   // ==================== CLASSIFICATION SYSTEM ROUTES ====================
   
   // Analyze contact and return score
-  app.post("/api/extension/analyze-contact", requireAuth, async (req, res) => {
+  app.post("/api/extension/analyze-contact", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const sessionUserId = getActiveAccount(req);
       if (!sessionUserId) {
@@ -2757,7 +2915,7 @@ export async function registerRoutes(
   // Renseigne le nom de profil (full_name) d'un People quand l'extension l'a
   // résolu depuis Instagram : l'ajout d'une personne ne saisit que l'id, donc
   // full_name reste null. On NE remplace PAS un nom déjà renseigné.
-  app.post("/api/extension/contact-name", requireAuth, async (req, res) => {
+  app.post("/api/extension/contact-name", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -2794,7 +2952,7 @@ export async function registerRoutes(
   // profile »). `profile_collected_at` distingue ensuite, côté popup, un nouveau
   // People (collecte d'abord) d'un People déjà préparé. Les mutuals sont écrites
   // dans les MÊMES colonnes que /pro-engagement (lues par /circle-stats).
-  app.post("/api/extension/person-profile", requireAuth, async (req, res) => {
+  app.post("/api/extension/person-profile", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const {
         contactUsername,
@@ -2885,14 +3043,14 @@ export async function registerRoutes(
   // (agent_pro_circle.py) : on enregistre les posts likés + les commentaires en
   // timeline, on recalcule total_likes_given / last_like_given_at et le
   // relationship_score (logique portée de calculate_relationship_score).
-  app.post("/api/extension/pro-engagement", requireAuth, async (req, res) => {
+  app.post("/api/extension/pro-engagement", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const ownerId = getCurrentUser(req);
       if (!ownerId) {
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const { engagements, analyzedPosts, engagers, mutuals, ownUsername } = req.body as {
+      const { engagements, analyzedPosts, engagers, mutuals, partialLikePosts, ownUsername } = req.body as {
         engagements?: Array<{
           username: string;
           likedPosts?: Array<{ postId: string; postUrl?: string; likedAt?: string }>;
@@ -2901,6 +3059,10 @@ export async function registerRoutes(
         analyzedPosts?: string[]; // ids des posts analysés, du + récent au + ancien
         engagers?: Array<{ username: string; posts: number; liked?: boolean; commented?: boolean }>;
         mutuals?: Array<{ username: string; count: number; members?: string[] }>;
+        // Posts dont la liste des likers était TRONQUÉE (plafond IG). Sur ces posts,
+        // ne pas avoir vu une People ne prouve PAS qu'elle n'a pas liké : on traite
+        // l'absence comme incertaine (ni rupture de streak, ni gap de timeline).
+        partialLikePosts?: string[];
         ownUsername?: string; // compte (profil) réellement analysé par l'extension
       };
 
@@ -2922,6 +3084,8 @@ export async function registerRoutes(
       }
       const orderedPosts = Array.isArray(analyzedPosts) ? analyzedPosts : [];
       const engagerList = Array.isArray(engagers) ? engagers : [];
+      // Posts à liste de likers incomplète → l'absence d'une People y est incertaine.
+      const partialSet = new Set<string>(Array.isArray(partialLikePosts) ? partialLikePosts : []);
       // Map username (minuscule) → nb de connexions mutuelles + liste des comptes en commun.
       const mutualByUser = new Map<string, number>();
       const mutualMembersByUser = new Map<string, string[]>();
@@ -3078,6 +3242,10 @@ export async function registerRoutes(
           let streak = 0;
           for (const pid of orderedPosts) {
             if (interacted.has(pid)) streak++;
+            // Post à liste de likers tronquée sans interaction VUE : on ne peut pas
+            // affirmer l'absence → on n'interrompt pas le streak (mais on ne le
+            // crédite pas non plus, faute de preuve).
+            else if (partialSet.has(pid)) continue;
             else break;
           }
           updateStreak.run(streak, memberId);
@@ -3112,6 +3280,9 @@ export async function registerRoutes(
                 gapBefore: gap,
               });
               gap = 0;
+            } else if (partialSet.has(pid)) {
+              // Liste des likers incomplète : on ne compte PAS ce post comme une
+              // rupture (une interaction a pu nous échapper) — gap inchangé.
             } else {
               gap++;
             }
@@ -3155,7 +3326,7 @@ export async function registerRoutes(
   });
 
   // Create classification suggestion
-  app.post("/api/extension/suggest-transition", requireAuth, async (req, res) => {
+  app.post("/api/extension/suggest-transition", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -3205,7 +3376,7 @@ export async function registerRoutes(
   });
 
   // Validate suggestion (accept or reject)
-  app.post("/api/extension/validate-suggestion", requireAuth, async (req, res) => {
+  app.post("/api/extension/validate-suggestion", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -3300,7 +3471,7 @@ export async function registerRoutes(
   });
 
   // Get pending suggestions
-  app.get("/api/extension/pending-suggestions", requireAuth, async (req, res) => {
+  app.get("/api/extension/pending-suggestions", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -3336,7 +3507,7 @@ export async function registerRoutes(
   });
 
   // Log classification transition
-  app.post("/api/extension/log-transition", requireAuth, async (req, res) => {
+  app.post("/api/extension/log-transition", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -3377,7 +3548,7 @@ export async function registerRoutes(
   // ==================== DM COLLECTION ROUTES ====================
 
   // Sync DMs from extension
-  app.post("/api/extension/sync-dms", requireAuth, async (req, res) => {
+  app.post("/api/extension/sync-dms", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -3489,7 +3660,7 @@ export async function registerRoutes(
   });
 
   // Get DM conversations
-  app.get("/api/extension/dm-conversations", requireAuth, async (req, res) => {
+  app.get("/api/extension/dm-conversations", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -3521,7 +3692,7 @@ export async function registerRoutes(
   // Get full stored DM history for a contact (chronological order).
   // Utilisé par le collector Pro : frontière du scroll incrémental + base de
   // fusion pour que l'analyse porte sur toute la conversation.
-  app.get("/api/extension/dm-history/:username", requireAuth, async (req, res) => {
+  app.get("/api/extension/dm-history/:username", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -3559,7 +3730,7 @@ export async function registerRoutes(
   });
 
   // Get DM stats for a contact
-  app.get("/api/extension/dm-stats/:username", requireAuth, async (req, res) => {
+  app.get("/api/extension/dm-stats/:username", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
@@ -4404,7 +4575,7 @@ export async function registerRoutes(
   });
 
   // Analyze DMs and trigger classification
-  app.post("/api/extension/analyze-dms", requireAuth, async (req, res) => {
+  app.post("/api/extension/analyze-dms", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
       const userId = getActiveAccount(req);
       if (!userId) {
