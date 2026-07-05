@@ -587,7 +587,9 @@ export class ProConversationCollector {
     //      - `settingSummary` = qualification (prochaine question, faits, manques) ;
     //      - `advice`         = dynamique relationnelle (comportement) uniquement.
     const coaching = this.settingCoach.analyze(messages, dyn);
-    const advice = this.dynamics.buildAdvice(dyn);
+    const storedLang = await chrome.storage.local.get('walerLanguage');
+    const lang: 'en' | 'fr' = storedLang.walerLanguage === 'fr' ? 'fr' : 'en';
+    const advice = this.dynamics.buildAdvice(dyn, lang);
 
     console.log(
       `📊 [Pro] @${username} — dms=${breakdown.dms} (serveur ${serverDmScore} + mots-clés ${keywordTone}), ` +

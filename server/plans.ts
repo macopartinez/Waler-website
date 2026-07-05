@@ -1,12 +1,44 @@
 import { db } from "./db";
-import { plans, subscriptions, type Plan, type Subscription } from "@shared/schema";
+import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
-// Plans par défaut
-export const DEFAULT_PLANS = [
+export interface PlanInfo {
+  id: number;
+  // NB : nom interne "base" = tier client 'premium' (routes.ts mappe
+  // 'premium' → 'base'). On ne renomme pas la clé pour ne pas casser ce mapping.
+  name: string;
+  displayName: string;
+  priceMonthly: number; // en centimes
+  priceYearly: number; // en centimes
+  maxAccounts: number; // 0 = illimité
+  maxHistoryDays: number; // 0 = illimité
+  features: string[];
+  stripePriceIdMonthly: string | null;
+  stripePriceIdYearly: string | null;
+  isActive: boolean;
+  trialDays: number;
+}
+
+export interface SubscriptionInfo {
+  userId: number;
+  planId: number;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  status: string;
+  billingPeriod: string | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+// Source de vérité statique pour les plans : les tables `plans`/`subscriptions`
+// définies dans shared/schema.ts ne sont PAS provisionnées sur la base Supabase
+// live (vérifié : seules app_users, followers, unfollowers, blockers, session,
+// verification_codes, users existent). Le statut d'abonnement réel vit donc sur
+// les colonnes app_users.subscription_tier / subscription_status / trial_ends_at
+// / stripe_* (voir getUserPlan/upsertSubscription ci-dessous).
+export const DEFAULT_PLANS: PlanInfo[] = [
   {
-    // NB : nom interne "base" = tier client 'premium' (routes.ts mappe
-    // 'premium' → 'base'). On ne renomme pas la clé pour ne pas casser ce mapping.
+    id: 1,
     name: "base",
     displayName: "Base",
     priceMonthly: 499, // 4.99€
@@ -26,12 +58,14 @@ export const DEFAULT_PLANS = [
     stripePriceIdMonthly: process.env.STRIPE_PRICE_BASE_MONTHLY || null,
     stripePriceIdYearly: process.env.STRIPE_PRICE_BASE_YEARLY || null,
     isActive: true,
+    trialDays: 7,
   },
   {
+    id: 2,
     name: "pro",
     displayName: "Pro",
-    priceMonthly: 1499, // 14.99€
-    priceYearly: 14399, // 143.99€ (économie de ~20%)
+    priceMonthly: 1999, // 19.99€
+    priceYearly: 23988, // 239.88€ (19.99€/mois facturé annuellement)
     maxAccounts: 3,
     maxHistoryDays: 0, // 0 = illimité
     features: [
@@ -50,77 +84,72 @@ export const DEFAULT_PLANS = [
     stripePriceIdMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY || null,
     stripePriceIdYearly: process.env.STRIPE_PRICE_PRO_YEARLY || null,
     isActive: true,
+    trialDays: 14,
   },
 ];
 
-/**
- * Initialise les plans par défaut dans la DB
- */
-export async function seedPlans(): Promise<void> {
-  for (const plan of DEFAULT_PLANS) {
-    const existing = await db.select().from(plans).where(eq(plans.name, plan.name));
-    
-    if (existing.length === 0) {
-      await db.insert(plans).values(plan);
-      console.log(`✅ Plan "${plan.displayName}" créé`);
-    }
-  }
+// Tier client ('premium'/'pro') <-> nom de plan serveur ('base'/'pro').
+function planNameToTier(planName: string): string {
+  return planName === "pro" ? "pro" : "premium";
+}
+
+function tierToPlanName(tier: string | null): string {
+  return tier === "pro" ? "pro" : "base";
 }
 
 /**
  * Récupère tous les plans actifs
  */
-export async function getActivePlans(): Promise<Plan[]> {
-  return db.select().from(plans).where(eq(plans.isActive, true));
+export async function getActivePlans(): Promise<PlanInfo[]> {
+  return DEFAULT_PLANS.filter((p) => p.isActive);
 }
 
 /**
  * Récupère un plan par son nom
  */
-export async function getPlanByName(name: string): Promise<Plan | null> {
-  const [plan] = await db.select().from(plans).where(eq(plans.name, name));
-  return plan || null;
+export async function getPlanByName(name: string): Promise<PlanInfo | null> {
+  return DEFAULT_PLANS.find((p) => p.name === name) ?? null;
 }
 
 /**
  * Récupère un plan par son ID
  */
-export async function getPlanById(id: number): Promise<Plan | null> {
-  const [plan] = await db.select().from(plans).where(eq(plans.id, id));
-  return plan || null;
+export async function getPlanById(id: number): Promise<PlanInfo | null> {
+  return DEFAULT_PLANS.find((p) => p.id === id) ?? null;
 }
 
 /**
- * Récupère le plan d'un utilisateur
+ * Récupère le plan et l'état d'abonnement d'un utilisateur, lus directement
+ * sur app_users (voir note en tête de fichier).
  */
 export async function getUserPlan(userId: number): Promise<{
-  plan: Plan;
-  subscription: Subscription | null;
+  plan: PlanInfo;
+  subscription: SubscriptionInfo | null;
 }> {
-  // Chercher la subscription de l'utilisateur
-  const [userSubscription] = await db
-    .select()
-    .from(subscriptions)
-    .where(eq(subscriptions.userId, userId));
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
 
-  if (userSubscription) {
-    const plan = await getPlanById(userSubscription.planId);
-    if (plan) {
-      return { plan, subscription: userSubscription };
-    }
-  }
+  const plan =
+    (await getPlanByName(tierToPlanName(user?.subscriptionTier ?? null))) ?? DEFAULT_PLANS[0];
 
-  // Par défaut, retourner le plan Base
-  const basePlan = await getPlanByName("base");
-  if (!basePlan) {
-    throw new Error("Base plan not found");
-  }
+  const subscription: SubscriptionInfo | null = user?.stripeSubscriptionId
+    ? {
+        userId,
+        planId: plan.id,
+        stripeCustomerId: user.stripeCustomerId ?? null,
+        stripeSubscriptionId: user.stripeSubscriptionId,
+        status: user.subscriptionStatus || "active",
+        billingPeriod: user.billingPeriod ?? null,
+        currentPeriodEnd: user.currentPeriodEnd ?? null,
+        cancelAtPeriodEnd: user.cancelAtPeriodEnd ?? false,
+      }
+    : null;
 
-  return { plan: basePlan, subscription: null };
+  return { plan, subscription };
 }
 
 /**
- * Crée ou met à jour une subscription pour un utilisateur
+ * Active/majore l'abonnement d'un utilisateur suite à un événement Stripe.
+ * Écrit directement sur app_users (voir note en tête de fichier).
  */
 export async function upsertSubscription(data: {
   userId: number;
@@ -129,51 +158,23 @@ export async function upsertSubscription(data: {
   stripeSubscriptionId?: string;
   status?: string;
   billingPeriod?: string;
-  currentPeriodStart?: Date;
   currentPeriodEnd?: Date;
-}): Promise<Subscription> {
-  // Vérifier si subscription existe
-  const [existing] = await db
-    .select()
-    .from(subscriptions)
-    .where(eq(subscriptions.userId, data.userId));
+  trialEndsAt?: Date | null;
+}): Promise<void> {
+  const plan = DEFAULT_PLANS.find((p) => p.id === data.planId);
 
-  if (existing) {
-    // Mettre à jour
-    const [updated] = await db
-      .update(subscriptions)
-      .set({
-        planId: data.planId,
-        stripeCustomerId: data.stripeCustomerId,
-        stripeSubscriptionId: data.stripeSubscriptionId,
-        status: data.status || existing.status,
-        billingPeriod: data.billingPeriod,
-        currentPeriodStart: data.currentPeriodStart,
-        currentPeriodEnd: data.currentPeriodEnd,
-        updatedAt: new Date(),
-      })
-      .where(eq(subscriptions.id, existing.id))
-      .returning();
-
-    return updated;
-  } else {
-    // Créer
-    const [created] = await db
-      .insert(subscriptions)
-      .values({
-        userId: data.userId,
-        planId: data.planId,
-        stripeCustomerId: data.stripeCustomerId,
-        stripeSubscriptionId: data.stripeSubscriptionId,
-        status: data.status || "active",
-        billingPeriod: data.billingPeriod,
-        currentPeriodStart: data.currentPeriodStart,
-        currentPeriodEnd: data.currentPeriodEnd,
-      })
-      .returning();
-
-    return created;
-  }
+  await db
+    .update(users)
+    .set({
+      subscriptionTier: plan ? planNameToTier(plan.name) : undefined,
+      subscriptionStatus: data.status || "active",
+      trialEndsAt: data.trialEndsAt ?? null,
+      stripeCustomerId: data.stripeCustomerId,
+      stripeSubscriptionId: data.stripeSubscriptionId,
+      billingPeriod: data.billingPeriod,
+      currentPeriodEnd: data.currentPeriodEnd,
+    })
+    .where(eq(users.id, data.userId));
 }
 
 /**

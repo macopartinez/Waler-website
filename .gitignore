@@ -19,6 +19,9 @@ server/public
 vite.config.ts.*
 *.tar.gz
 
+# Stray/duplicate build zips (packaged releases live in waler-extension/releases/)
+scripts/archive/*.zip
+
 # État interne Replit + Playwright
 .local/
 waler-extension/waler-recording-*.json
