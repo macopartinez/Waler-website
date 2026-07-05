@@ -41,9 +41,9 @@ export default function UpgradeToPro() {
   const offerActive = timeLeft.offerActive;
 
   const premiumMonthly = 4.99;
-  const proMonthly = 14.99;
+  const proMonthly = 19.99;
   const premiumYearlyOffer = 47.99;
-  const proYearlyOffer = 143.99;
+  const proYearlyOffer = 239.88;
   const premiumYearlyStandard = yearlyStandardPrice(premiumMonthly);
   const proYearlyStandard = yearlyStandardPrice(proMonthly);
 

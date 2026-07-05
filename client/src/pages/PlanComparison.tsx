@@ -27,8 +27,8 @@ const PLAN_META: Plan[] = [
   },
   {
     id: 'pro',
-    priceMonthly: 14.99,
-    priceYearly: 143.99,
+    priceMonthly: 19.99,
+    priceYearly: 239.88,
     icon: Crown,
     popular: true,
   },

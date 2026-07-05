@@ -114,7 +114,7 @@ export function PricingModal({ isOpen, onClose, defaultPlan, onPlanSelected, req
                     {/* Price */}
                     <div className="mb-6">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-5xl font-black text-white">${plan.price}</span>
+                        <span className="text-5xl font-black text-white">{plan.price}€</span>
                         <span className="text-gray-400">/{plan.interval}</span>
                       </div>
                       <p className="text-sm text-gray-400 mt-1">

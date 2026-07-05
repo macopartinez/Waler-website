@@ -113,8 +113,8 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
   // tarification) : une fois le compte à rebours expiré, l'annuel redevient 12× le mensuel.
   const { offerActive } = useOfferCountdown();
 
-  const planMonthly = (planId: 'premium' | 'pro') => (planId === 'premium' ? 4.99 : 14.99);
-  const planYearlyOffer = (planId: 'premium' | 'pro') => (planId === 'premium' ? 47.99 : 143.99);
+  const planMonthly = (planId: 'premium' | 'pro') => (planId === 'premium' ? 4.99 : 19.99);
+  const planYearlyOffer = (planId: 'premium' | 'pro') => (planId === 'premium' ? 47.99 : 239.88);
 
   // Prix dynamiques selon le billing period
   const getPlanPrice = (planId: 'premium' | 'pro') => {
@@ -128,7 +128,7 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
     return yearlyStandardPrice(planMonthly(planId)) - planYearlyOffer(planId);
   };
 
-  const yearlyDiscount = Math.round((1 - (143.99 / (14.99 * 12))) * 100);
+  const yearlyDiscount = Math.round((1 - (239.88 / (19.99 * 12))) * 100);
   
   return (
     <div className="w-full max-w-6xl space-y-12">
