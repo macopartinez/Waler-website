@@ -83,7 +83,7 @@ export type Circle = 'vip' | 'keep' | 'watch';
 export type AnalysisStatus = 'pending' | 'analyzing' | 'completed' | 'failed';
 
 export type Signal = {
-  type: 'follow' | 'unfollow' | 'refollow' | 'like' | 'comment' | 'story_view' | 'dm' | 'dm_open' | 'inactive_active' | 'active_inactive' | 'streak';
+  type: 'follow' | 'unfollow' | 'refollow' | 'blocked' | 'deleted' | 'ghost' | 'like' | 'comment' | 'story_view' | 'dm' | 'dm_open' | 'inactive_active' | 'active_inactive' | 'streak';
   timestamp: Date;
   description: string;
   postUrl?: string; // lien du post pour les signaux like/comment (sinon absent)
