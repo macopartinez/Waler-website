@@ -71,13 +71,14 @@ export const en = {
     comparison: {
       title: "See the",
       titleHighlight: "difference",
-      subtitle: "Other trackers make you wait a week and show you nothing until they're done. Waler works with you, not behind your back.",
+      subtitle: "Other trackers make you wait a week, show you nothing until they're done, and stop at your own profile. Waler works with you in real time — across your personal circle and your business.",
       competitorA: "Snoop Report",
       competitorB: "Dolphin Radar",
       rows: [
         { label: "Time to results", type: "text" as const, waler: "Same day", others: "Once a week" },
         { label: "Control over your scans", type: "boolean" as const, waler: true, others: false },
         { label: "See the analysis live", type: "boolean" as const, waler: true, others: false },
+        { label: "Personal + business in one tool", type: "boolean" as const, waler: true, others: false },
       ],
     },
     testimonials: {
@@ -104,10 +105,10 @@ export const en = {
     },
     proIntro: {
       badge: "PRO MODE",
-      title: "Turn insights into",
-      titleHighlight: "business growth",
+      title: "Personal life and business —",
+      titleHighlight: "one tool",
       subtitle:
-        "Go beyond your own profile. Track a list of contacts, see clear checkpoints for every relationship, and know who's worth your attention today. Waler shows the signal — you make the move.",
+        "Every other tool makes you pick a side: a follower tracker for your personal account, or a sales CRM for your business. Waler is the only one that runs both at once. See clear checkpoints for every relationship, know who's worth your attention today — then make the move yourself.",
       stats: [
         { value: "0–100", label: "Relationship score per contact" },
         { value: "Multi-account", label: "Profiles from one dashboard" },
@@ -189,6 +190,24 @@ export const en = {
         {
           title: "Deterministic, and explainable",
           desc: "Same data in, same result out — every single time, and every score traces back to a rule we can show you. Real math, not a black box.",
+        },
+      ],
+    },
+    whoFor: {
+      badge: "HONEST FIT",
+      title: "Who Waler is",
+      titleHighlight: "really for",
+      subtitle: "We'd rather be upfront. Waler is built to understand and shape an audience — not to bulk-process a crowd. If that's what you're after, it fits like a glove. If you run a very large professional account, there are a couple of things worth knowing first.",
+      cards: [
+        {
+          tag: "MADE FOR YOU",
+          title: "Individuals & personal accounts",
+          desc: "You want to educate and filter your audience, know who truly follows you, and quantify it — measure your real acquisition and closing rate from actual conversations. On a personal-sized account, Base covers all of this comfortably.",
+        },
+        {
+          tag: "GOOD TO KNOW",
+          title: "Large professional accounts",
+          desc: "To keep your account safe, Waler scans gradually — around 1,500 followers a day — so a first full scan of a very large account can take several days (it runs on its own and resumes each day). Waler is made to understand an audience, not to crunch hundreds of thousands of followers at once.",
         },
       ],
     },

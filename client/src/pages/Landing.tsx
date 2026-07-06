@@ -313,7 +313,7 @@ export default function Landing() {
 
                 {t.landing.comparison.rows.map((row, i) => ({
                   ...row,
-                  icon: [Clock, SlidersHorizontal, Eye][i],
+                  icon: [Clock, SlidersHorizontal, Eye, Users][i],
                 })).map((row, i) => (
                   <Fragment key={i}>
                     <div className="py-5 px-4 md:px-6 flex items-center gap-3 text-left border-t border-white/5">
@@ -802,6 +802,51 @@ export default function Landing() {
                   <div className="w-12 h-12 rounded-2xl bg-[#02c950]/10 border border-[#02c950]/20 flex items-center justify-center mb-4">
                     <card.Icon className="w-6 h-6 text-[#02c950]" />
                   </div>
+                  <h3 className="text-lg font-bold text-white mb-2">{card.title}</h3>
+                  <p className="text-sm text-gray-400 leading-relaxed">{card.desc}</p>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <section className="h-screen snap-start snap-always flex items-center justify-center relative px-6" data-testid="section-who-for">
+        <div className="max-w-5xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="text-paper"
+          >
+            <div className="inline-flex items-center gap-2 bg-[#02c950]/10 backdrop-blur-md border border-[#02c950]/30 rounded-full px-6 py-3 mb-8 shadow-[0_0_30px_rgba(2,201,80,0.15)]">
+              <Target className="w-5 h-5 text-[#02c950]" />
+              <span className="text-[#02c950] font-bold tracking-wider text-sm">{t.landing.whoFor.badge}</span>
+            </div>
+            <h2 className="text-5xl md:text-7xl font-display font-black mb-8 text-white tracking-tighter leading-tight">
+              {t.landing.whoFor.title} <span className="text-gradient">{t.landing.whoFor.titleHighlight}</span>
+            </h2>
+            <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto leading-relaxed">
+              {t.landing.whoFor.subtitle}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto text-left">
+              {t.landing.whoFor.cards.map((card, i) => ({
+                ...card,
+                Icon: [User, Clock][i],
+              })).map((card, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.15, duration: 0.6 }}
+                  className="oled-card rounded-3xl p-6"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-[#02c950]/10 border border-[#02c950]/20 flex items-center justify-center mb-4">
+                    <card.Icon className="w-6 h-6 text-[#02c950]" />
+                  </div>
+                  <div className="text-[10px] font-bold text-[#02c950] tracking-widest mb-2">{card.tag}</div>
                   <h3 className="text-lg font-bold text-white mb-2">{card.title}</h3>
                   <p className="text-sm text-gray-400 leading-relaxed">{card.desc}</p>
                 </motion.div>

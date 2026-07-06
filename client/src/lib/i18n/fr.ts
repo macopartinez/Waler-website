@@ -73,13 +73,14 @@ export const fr: Translations = {
     comparison: {
       title: "Voir la",
       titleHighlight: "différence",
-      subtitle: "Les autres trackers vous font attendre une semaine et ne montrent rien avant la fin. Waler travaille avec vous, pas dans votre dos.",
+      subtitle: "Les autres trackers vous font attendre une semaine, ne montrent rien avant la fin, et s'arrêtent à votre propre profil. Waler travaille avec vous en temps réel — pour votre cercle perso comme pour votre business.",
       competitorA: "Snoop Report",
       competitorB: "Dolphin Radar",
       rows: [
         { label: "Délai des résultats", type: "text" as const, waler: "Le jour même", others: "Une fois par semaine" },
         { label: "Contrôle sur vos analyses", type: "boolean" as const, waler: true, others: false },
         { label: "Suivi de l'analyse en direct", type: "boolean" as const, waler: true, others: false },
+        { label: "Perso + business dans un seul outil", type: "boolean" as const, waler: true, others: false },
       ],
     },
     testimonials: {
@@ -106,10 +107,10 @@ export const fr: Translations = {
     },
     proIntro: {
       badge: "MODE PRO",
-      title: "Transformez ces insights en",
-      titleHighlight: "croissance business",
+      title: "Votre vie perso et votre business —",
+      titleHighlight: "un seul outil",
       subtitle:
-        "Allez au-delà de votre propre profil. Suivez une liste de contacts, obtenez des repères clairs pour chaque relation, et sachez qui mérite votre attention aujourd'hui. Waler vous montre le signal — à vous de jouer.",
+        "Tous les autres outils vous forcent à choisir : un tracker d'abonnés pour votre compte perso, ou un CRM de vente pour votre business. Waler est le seul à faire les deux à la fois. Repérez les checkpoints de chaque relation, sachez qui mérite votre attention aujourd'hui — puis jouez le coup vous-même.",
       stats: [
         { value: "0–100", label: "Score de relation par contact" },
         { value: "Multi-comptes", label: "Tous les profils depuis un même tableau de bord" },
@@ -191,6 +192,24 @@ export const fr: Translations = {
         {
           title: "Déterministe, et explicable",
           desc: "Mêmes données en entrée, même résultat en sortie — à chaque fois, et chaque score découle d'une règle qu'on peut vous montrer. De vraies maths, pas une boîte noire.",
+        },
+      ],
+    },
+    whoFor: {
+      badge: "POUR QUI, VRAIMENT",
+      title: "Waler, c'est",
+      titleHighlight: "pour qui ?",
+      subtitle: "On préfère être clairs d'entrée. Waler est fait pour comprendre et façonner une audience — pas pour traiter une foule en masse. Si c'est ce que vous cherchez, il vous va comme un gant. Si vous gérez un très gros compte professionnel, il y a deux ou trois choses à savoir avant.",
+      cards: [
+        {
+          tag: "FAIT POUR VOUS",
+          title: "Particuliers & comptes personnels",
+          desc: "Vous voulez éduquer et filtrer votre audience, savoir qui vous suit vraiment, et la quantifier — mesurer votre vrai taux d'acquisition et de closing à partir de conversations réelles. Sur un compte de taille personnelle, l'offre Base couvre tout ça sans effort.",
+        },
+        {
+          tag: "BON À SAVOIR",
+          title: "Gros comptes professionnels",
+          desc: "Pour protéger votre compte, Waler scanne progressivement — environ 1 500 abonnés par jour — donc un premier scan complet d'un très gros compte peut prendre plusieurs jours (il tourne tout seul et reprend chaque jour). Waler est pensé pour comprendre une audience, pas pour avaler des centaines de milliers d'abonnés d'un coup.",
         },
       ],
     },
