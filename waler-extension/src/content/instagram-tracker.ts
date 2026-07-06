@@ -24,7 +24,7 @@ import {
   isAccountLinked,
 } from '../background/account-storage.js';
 import { maybePromptAccountLink, autoLinkPrimaryAccount } from './account-linker.js';
-import { startBaseline, completeBaseline, triggerBackoff } from './scan-budget.js';
+import { startBaseline, completeBaseline, triggerBackoff, getScanBudget, isBackoffActive } from './scan-budget.js';
 
 // Interfaces pour la base de données de followers
 interface FollowerEntry {
@@ -1156,8 +1156,14 @@ class InstagramTracker {
       let count = this.getFollowerCountFromDOM();
       let source = 'DOM';
 
-      // 2. Fallback : l'API Instagram (fonctionne hors de notre profil)
-      if (count === null) {
+      // 2. Fallback : l'API Instagram (fonctionne hors de notre profil). MAIS on
+      //    respecte le backoff global : si Instagram nous limite déjà (429/action-
+      //    block → backoff armé dans scan-budget), on n'émet PAS cette requête
+      //    toutes les 30s — marteler l'API pendant un throttling aggrave le risque.
+      //    On saute simplement ce cycle (le DOM reprend la main dès qu'on repasse
+      //    sur notre profil). Les appels internes au SCAN restent, eux, gouvernés
+      //    par la porte du scroller (checkScanGate) en amont.
+      if (count === null && !isBackoffActive(await getScanBudget())) {
         count = await this.fetchRealFollowerCount();
         source = 'API';
       }

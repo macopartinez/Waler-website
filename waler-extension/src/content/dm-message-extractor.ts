@@ -20,12 +20,31 @@ export const VOICE_PLACEHOLDER = '[voice message]';
  *  transcription »). On l'indique explicitement à l'utilisateur. */
 export const VOICE_NO_TRANSCRIPT = '[voice message — transcription unavailable (too old)]';
 
+/**
+ * Nature de la bulle. Au-delà du texte/vocal, Instagram affiche un LABEL de
+ * contexte quand un message est une RÉPONSE à une story ou à un reel (« A répondu
+ * à votre story » / « Replied to your reel »…). On les distingue car ce sont deux
+ * signaux d'engagement entrant forts (cf. ConversationDynamics). Absent = texte.
+ */
+export type MessageKind = 'text' | 'voice' | 'story-reply' | 'reel-reply';
+
+// Labels de contexte « a répondu à une story / un reel » (FR/EN, accents retirés
+// par normSep). On exige un verbe de réponse/partage PROCHE du mot story/reel
+// pour ne pas déclencher sur un message qui contiendrait juste « story ».
+const STORY_REPLY_RE = /(repondu|replied|reply)\b.{0,24}\b(story|stories|storie)\b/;
+const REEL_REPLY_RE = /(repondu|replied|reply|envoye|partage|sent|shared)\b.{0,24}\b(reel|reels)\b/;
+
 export interface ExtractedMessage {
   messageId: string;
   text: string;
   isSent: boolean;
   timestamp: number | null;
   reactions: string[];
+  /**
+   * Nature de la bulle (texte par défaut). `story-reply` / `reel-reply` marquent
+   * une réponse à une story / un reel — comptée comme signal d'engagement.
+   */
+  kind?: MessageKind;
   /**
    * Rang chronologique dérivé du DOM (plus petit = plus ancien). Fiable même
    * sans horodatage exact : voir `extractVisible`. Interne au tri.
@@ -139,6 +158,7 @@ export class DMMessageExtractor {
           isSent,
           timestamp,
           reactions,
+          kind: 'voice',
           order,
         });
         added++;
@@ -149,12 +169,19 @@ export class DMMessageExtractor {
       const text = this.extractText(row);
       if (!text) continue;
 
+      // Réponse à une story / un reel ? Le label de contexte (« A répondu à votre
+      // story »…) vit dans la même bulle que le texte de la réponse : on le
+      // détecte au niveau de la ligne pour taguer le message (signal d'engagement).
+      const kind = this.detectReplyKind(row) ?? 'text';
+
       // Clé de dédup basée sur l'heure EXACTE uniquement (pas celle déduite d'un
       // séparateur, qui peut être absent selon le scroll) → dédup stable.
       const key = `${realTs ?? 'na'}|${isSent ? 1 : 0}|${text.slice(0, 60)}`;
       const existing = this.cache.get(key);
       if (existing) {
         if (existing.timestamp == null && timestamp != null) existing.timestamp = timestamp;
+        // Le kind peut se révéler après coup (label rendu au scroll suivant).
+        if ((!existing.kind || existing.kind === 'text') && kind !== 'text') existing.kind = kind;
         continue;
       }
 
@@ -164,6 +191,7 @@ export class DMMessageExtractor {
         isSent,
         timestamp,
         reactions,
+        kind,
         order,
       });
       added++;
@@ -307,6 +335,52 @@ export class DMMessageExtractor {
       }
     }
     return false;
+  }
+
+  /**
+   * Détecte si la bulle est une RÉPONSE à une story ou à un reel, via le label de
+   * contexte qu'IG rend au-dessus du message (« A répondu à votre story »,
+   * « Replied to your reel »…). Deux signaux d'engagement distincts. Best-effort
+   * FR/EN : on agrège les aria-labels + les textes de feuilles COURTS de la bulle
+   * (le label est un petit texte gris), puis on matche les formes attendues.
+   */
+  private detectReplyKind(row: HTMLElement): 'story-reply' | 'reel-reply' | null {
+    const probe = this.collectReplyContext(row);
+    if (!probe) return null;
+    if (STORY_REPLY_RE.test(probe)) return 'story-reply';
+    if (REEL_REPLY_RE.test(probe)) return 'reel-reply';
+    return null;
+  }
+
+  /** Agrège aria-labels + textes de feuilles courts d'une bulle (normalisés) pour
+   *  y chercher un label de contexte « répondu à … story/reel ». */
+  private collectReplyContext(row: HTMLElement): string {
+    const parts: string[] = [];
+    row.querySelectorAll('[aria-label]').forEach((el) => {
+      const v = el.getAttribute('aria-label');
+      if (v && v.length <= 60) parts.push(v);
+    });
+    const nodes = Array.from(row.querySelectorAll('span, div')) as HTMLElement[];
+    for (const el of nodes) {
+      if (el.children.length > 0) continue; // feuilles uniquement
+      const t = (el.textContent || '').trim();
+      if (t && t.length <= 40) parts.push(t);
+    }
+    return this.normSep(parts.join(' '));
+  }
+
+  /**
+   * Vrai si le texte est UNIQUEMENT le label de contexte « a répondu à … story/
+   * reel » (et non un vrai message) — évite un message fantôme si IG le rend dans
+   * sa propre ligne, sans texte de réponse.
+   */
+  private isReplyContextLabel(raw: string): boolean {
+    const s = this.normSep(raw);
+    if (!s || s.length > 40) return false;
+    return (
+      /^(vous avez |you |tu as |il a |elle a |a )?(repondu|replied|reply)\b.*\b(story|stories|storie|reel|reels)$/.test(s) ||
+      /^(a )?(envoye|partage|sent|shared)\b.*\b(reel|reels|story|stories)$/.test(s)
+    );
   }
 
   /** Détecte un message vocal (lecteur audio / bouton lecture / forme d'onde). */
@@ -587,6 +661,9 @@ export class DMMessageExtractor {
     if (raw.length === 0) return '';
     if (this.looksLikeSeparator(raw)) return '';
     if (/^(vu|seen)\b/i.test(raw) || /^vu(e)?\s+(à|le|hier|aujourd)/i.test(raw)) return '';
+    // Label de contexte « a répondu à … story/reel » seul (pas de texte de réponse)
+    // → ligne système, ignorée (le kind est détecté au niveau de la bulle réponse).
+    if (this.isReplyContextLabel(raw)) return '';
     // Bruit d'interface du panneau du thread (carte profil, boutons) capté quand
     // on extrait depuis un périmètre large : « pseudo · Instagram », « Voir le
     // profil », libellés de transcription, etc.

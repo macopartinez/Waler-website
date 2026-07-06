@@ -8,7 +8,7 @@
     "build": "node build.js",
     "package": "node package-extension.js",
     "type-check": "tsc --noEmit",
-    "test": "npx tsx test/setting-coach.test.ts && npx tsx test/keyword-matcher.test.ts"
+    "test": "npx tsx test/setting-coach.test.ts && npx tsx test/keyword-matcher.test.ts && npx tsx test/conversation-dynamics.test.ts"
   },
   "dependencies": {
     "webextension-polyfill": "^0.12.0"

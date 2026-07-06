@@ -19,6 +19,7 @@ import { ScoringEngine, type Contact } from './scoring-engine.js';
 import { DMAnalyzer, type Conversation, type ConversationMessage } from './dm-analyzer.js';
 import { ConversationDynamicsAnalyzer } from './conversation-dynamics.js';
 import { SettingCoach } from './setting-coach.js';
+import { getScanBudget, isBackoffActive } from './scan-budget.js';
 
 export interface ProRefusal {
   username: string;
@@ -233,6 +234,22 @@ export class ProConversationCollector {
       return;
     }
 
+    // Filet de sécurité GLOBAL contre les blocages : si Instagram nous rate-limite
+    // déjà (429 / action-block capté pendant un scan de followers → backoff armé
+    // dans scan-budget), on NE lance PAS d'ouverture active de conversation.
+    // Ouvrir un thread depuis l'inbox = le marquer lu = une ACTION, précisément ce
+    // qui fait escalader un throttling vers un vrai blocage. On diffère jusqu'à la
+    // fin du backoff. NB : l'analyse d'un thread DÉJÀ ouvert (fast path) et le
+    // rafraîchissement live (lecture du visible) restent autorisés : ils sont passifs.
+    const budget = await getScanBudget();
+    if (isBackoffActive(budget)) {
+      const retryAt = new Date(budget.backoffUntil).toLocaleTimeString();
+      console.warn(`🛑 [Pro] Ouverture différée : Instagram limite les actions (reprise vers ${retryAt}).`);
+      this.overlay.showError(`Instagram limits actions right now — analysis deferred (retry around ${retryAt})`);
+      await this.clearState();
+      return;
+    }
+
     const username = state.targetUsername;
     let fullName = state.targetFullName || '';
 
@@ -405,7 +422,16 @@ export class ProConversationCollector {
     history.forEach((m, i) => map.set(m.messageId, { ...m, order: i }));
     let next = history.length;
     for (const c of collected) {
-      if (map.has(c.messageId)) continue; // frontière / chevauchement déjà présent
+      const existing = map.get(c.messageId);
+      if (existing) {
+        // Frontière / chevauchement déjà présent. L'historique serveur ne stocke
+        // pas encore le `kind` (story-reply / reel-reply) : on le récupère depuis
+        // la collecte fraîche pour ne pas perdre le signal d'engagement.
+        if ((!existing.kind || existing.kind === 'text') && c.kind && c.kind !== 'text') {
+          existing.kind = c.kind;
+        }
+        continue;
+      }
       map.set(c.messageId, { ...c, order: next++ });
     }
     return Array.from(map.values()).sort((a, b) => a.order - b.order);
@@ -1275,16 +1301,30 @@ export class ProConversationCollector {
     console.log(`✨ [Pro] Analyse live de la conversation avec @${username}${changed ? ' (nouveau message détecté)' : ''}`);
 
     // Extraire les messages actuellement visibles (pas de scroll complet pour
-    // ne pas gêner l'utilisateur), puis mettre à jour les stats silencieusement.
+    // ne pas gêner l'utilisateur).
     const extractor = new DMMessageExtractor();
     await extractor.expandVoiceTranscripts(scopeEl);
     extractor.extractVisible(scopeEl);
-    const messages = extractor.getAll();
-    if (messages.length === 0) return;
+    const visible = extractor.getAll();
+    if (visible.length === 0) return;
+
+    // Delta-first : fusionner les bulles visibles SUR le baseline déjà stocké
+    // (dédup par messageId), au lieu de tout recalculer sur le seul visible.
+    // Sinon un rafraîchissement live écraserait une conversation déjà analysée à
+    // fond (ex. 200 messages) par un instantané de ~10 bulles visibles →
+    // firstInteractionDate, volumes et température faussés. `mergeHistory`
+    // conserve TOUTES les entrées stockées, donc la fusion ne peut jamais réduire
+    // l'historique : le live ne fait qu'enrichir. Aucun scroll, aucune requête IG
+    // (seul le serveur Waler est sollicité) : la lecture reste 100 % passive.
+    const history = await this.fetchStoredHistory(username);
+    const messages = this.mergeHistory(history, visible);
 
     const seenReceipt = extractor.detectSeenReceipt(scopeEl);
     await this.persistAnalysis(username, messages, seenReceipt);
-    console.log(`✅ [Pro] Stats live mises à jour pour @${username} (${messages.length} messages visibles)`);
+    console.log(
+      `✅ [Pro] Stats live mises à jour pour @${username} ` +
+        `(${visible.length} visibles + ${history.length} stockés → ${messages.length} fusionnés)`
+    );
   }
 
   /**
