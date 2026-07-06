@@ -15,6 +15,10 @@ import { ProfileAnalyzer } from './profile-analyzer.js';
 // d'unfollowers et la base de followers appartiennent au compte courant. Les lire
 // /écrire en global contaminait le compte principal (faux « 211 » partout).
 import { accountGet, accountSet } from '../background/account-storage.js';
+// Backoff partagé avec le scroller budgété : un rate-limit détecté ICI doit
+// aussi mettre en pause un baseline en cours pour ce compte (même signal de
+// risque, même compte Instagram).
+import { isRateLimitSignal, triggerBackoff } from './scan-budget.js';
 
 export interface UnfollowerAnalysisResult {
   totalMissing: number;
@@ -73,37 +77,49 @@ export class UnfollowerDetector {
     try {
       console.log('🎬 Starting unfollower analysis...');
 
-      // Phase 1: Scan complet des followers actuels
-      console.log('📊 Phase 1: Scanning current followers...');
-      const currentFollowers = await this.scanCurrentFollowers(currentUsername);
-      console.log(`✅ Current followers scanned: ${currentFollowers.length}`);
+      // Phase 1 : obtenir la liste des followers ACTUELS. On PRIORISE la
+      // pagination API (`fetchCurrentFollowersByPk`) — déjà nécessaire pour la
+      // résolution des renames, déjà throttlée (600-1000ms/page), et dont la
+      // complétude est garantie par la pagination elle-même (`next_max_id`
+      // épuisé naturellement), pas par une heuristique. Le scroll DOM
+      // (`scanCurrentFollowers`, qui EXIGE le modal déjà ouvert) ne sert plus
+      // qu'en REPLI si l'API échoue/est incomplète (ex. compte > ~4000
+      // followers, hors du cap de pagination) → moins d'activité Instagram
+      // pour un résultat identique dans l'immense majorité des cas.
+      console.log('📊 Phase 1: Fetching current followers via API (pk-based)...');
+      const apiFollowers = await this.fetchCurrentFollowersByPk();
+      const apiUsable = this.apiListUsable(apiFollowers);
+
+      let currentFollowers: string[];
+      if (apiUsable) {
+        currentFollowers = Array.from(apiFollowers!.map.values());
+        console.log(`✅ Current followers via API: ${currentFollowers.length} (scroll DOM évité)`);
+      } else {
+        console.log('ℹ️ Liste API followers indisponible/incomplète — repli sur le scroll DOM...');
+        currentFollowers = await this.scanCurrentFollowers(currentUsername);
+        console.log(`✅ Current followers via DOM: ${currentFollowers.length}`);
+
+        // GARDE-FOU DE COMPLÉTUDE — ne s'applique QU'au repli DOM : ce scan-là
+        // ne vaut que s'il a atteint le bas de la liste (validé contre le
+        // compteur live). Le chemin API n'en a pas besoin : sa complétude est
+        // déjà garantie par `apiUsable` (pagination épuisée naturellement).
+        const liveCountForGate = (await accountGet('lastFollowerCount')).lastFollowerCount || 0;
+        if (liveCountForGate > 0 && currentFollowers.length < liveCountForGate - 5) {
+          console.warn(
+            `⛔ Scan incomplet : ${currentFollowers.length} followers chargés pour ${liveCountForGate} réels. ` +
+            `La modale n'a pas été défilée jusqu'en bas → analyse ANNULÉE pour éviter de FAUX unfollowers. ` +
+            `Re-scrolle ta liste de followers jusqu'en bas, puis relance.`
+          );
+          // ABANDON (≠ « 0 unfollower ») : on ne touche NI au drapeau NI au badge.
+          result.totalMissing = 0;
+          result.aborted = true;
+          return result;
+        }
+      }
 
       // Phase 2: Comparer avec la base de données
       console.log('📊 Phase 2: Comparing with database...');
 
-      // GARDE-FOU DE COMPLÉTUDE — le scan ne vaut QUE s'il a atteint le bas de la
-      // liste (validé contre le compteur live = vérité du NOMBRE). Scroll incomplet
-      // → de vrais followers deviendraient de faux « manquants » → ABANDON.
-      const liveCountForGate = (await accountGet('lastFollowerCount')).lastFollowerCount || 0;
-      if (liveCountForGate > 0 && currentFollowers.length < liveCountForGate - 5) {
-        console.warn(
-          `⛔ Scan incomplet : ${currentFollowers.length} followers chargés pour ${liveCountForGate} réels. ` +
-          `La modale n'a pas été défilée jusqu'en bas → analyse ANNULÉE pour éviter de FAUX unfollowers. ` +
-          `Re-scrolle ta liste de followers jusqu'en bas, puis relance.`
-        );
-        // ABANDON (≠ « 0 unfollower ») : on ne touche NI au drapeau NI au badge.
-        result.totalMissing = 0;
-        result.aborted = true;
-        return result;
-      }
-
-      // SUIVI PAR ID STABLE (`pk`) — récupéré UNE fois, exploité AVANT tout calcul
-      // de manquants :
-      const apiFollowers = await this.fetchCurrentFollowersByPk();
-      const apiUsable = this.apiListUsable(apiFollowers);
-      if (!apiUsable) {
-        console.log('ℹ️ Liste API followers indisponible/incomplète — suivi pk ignoré ce run (fallback DOM).');
-      }
       // 1. RÉSOUDRE LES RENAMES + backfiller les pk sur TOUTE la base, AVANT de
       //    calculer les manquants. Un rename NE CHANGE PAS le nombre de followers :
       //    on migre l'entrée (ancien→nouveau pseudo) par `pk`, au lieu de la voir
@@ -133,7 +149,8 @@ export class UnfollowerDetector {
         // cache → on CONSERVE la détection au lieu de la rétrograder à 0.
         const prior = await accountGet(['unfollowerDetected', 'unfollowerCount']);
         const dbSize = await this.getDatabaseSize();
-        const authoritativeCount = apiUsable ? apiFollowers!.map.size : liveCountForGate;
+        const liveCount = (await accountGet('lastFollowerCount')).lastFollowerCount || 0;
+        const authoritativeCount = apiUsable ? apiFollowers!.map.size : liveCount;
         const expectedMissing = authoritativeCount > 0 ? Math.max(0, dbSize - authoritativeCount) : 0;
 
         if (prior.unfollowerDetected && expectedMissing > 0) {
@@ -237,18 +254,22 @@ export class UnfollowerDetector {
   }
 
   /**
-   * Scan complet des followers actuels via le modal.
-   * Comportement éprouvé : la modale des followers doit être OUVERTE MANUELLEMENT
-   * avant de lancer l'analyse. On scrolle simplement la liste déjà affichée.
-   * (Le paramètre myUsername est conservé pour compat d'appel, non utilisé ici.)
+   * Scan complet des followers actuels via le modal — REPLI utilisé seulement
+   * quand la pagination API (`fetchCurrentFollowersByPk`) est indisponible ou
+   * incomplète (cf. `analyzeUnfollowers`). Ouvre le modal AUTOMATIQUEMENT s'il
+   * n'est pas déjà affiché (via `openFollowersModal`), puis scrolle la liste.
    */
-  private async scanCurrentFollowers(_myUsername?: string): Promise<string[]> {
+  private async scanCurrentFollowers(myUsername?: string): Promise<string[]> {
     try {
-      const modal = document.querySelector('[role="dialog"]');
+      let modal = document.querySelector('[role="dialog"]');
       if (!modal) {
-        throw new Error(
-          "Ouvre d'abord la liste de tes followers (clique sur « followers » sur ton profil), puis relance l'analyse."
-        );
+        console.log('ℹ️ Modale followers non ouverte — ouverture automatique...');
+        modal = await this.openFollowersModal(myUsername);
+        if (!modal) {
+          throw new Error(
+            "Impossible d'ouvrir automatiquement la liste de tes followers. Ouvre-la manuellement (clique sur « followers » sur ton profil), puis relance l'analyse."
+          );
+        }
       }
 
       // Utiliser le scroller intelligent
@@ -450,9 +471,20 @@ export class UnfollowerDetector {
         });
         if (!res.ok) {
           console.log(`⚠️ [API followers] HTTP ${res.status} (page ${page})`);
+          if (isRateLimitSignal(res.status)) {
+            console.warn('🛑 [API followers] Rate-limit détecté — arrêt immédiat, backoff activé pour protéger le compte.');
+            await triggerBackoff();
+          }
           return page === 0 ? null : { map: byPk, complete: false };
         }
         const data = await res.json();
+        // Instagram renvoie parfois un throttle en 200 (corps "please wait a few
+        // minutes"/feedback_required) plutôt qu'un vrai 429 — mêmes conséquences.
+        if (isRateLimitSignal(res.status, JSON.stringify(data))) {
+          console.warn('🛑 [API followers] Signal de throttle détecté (200) — arrêt, backoff activé.');
+          await triggerBackoff();
+          return page === 0 ? null : { map: byPk, complete: false };
+        }
         const users = data?.users;
         if (!Array.isArray(users)) return page === 0 ? null : { map: byPk, complete: false };
 

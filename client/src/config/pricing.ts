@@ -47,12 +47,12 @@ export const PRICING_PLANS: PricingPlan[] = [
       'Unlimited history',
       'Personal + Professional dual mode',
       'Client & prospect CRM (VIP / Keep / Watch)',
-      'DM conversation temperature (hot / warm / cold)',
+      'DM checkpoints — temperature, momentum, priority',
       'Lead qualification phases (setting)',
       'Interaction signal timeline',
       'Contact health & priority scoring',
       'PDF progress reports & export',
-      '"Waler Pro Coach" badge'
+      'Waler Pro Coach: signals, not scripts — you write every message'
     ]
   }
 ];

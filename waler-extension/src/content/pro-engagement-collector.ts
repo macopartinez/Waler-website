@@ -22,10 +22,13 @@
 
 import type ScanOverlay from './scan-overlay.js';
 import { ProfileAnalyzer } from './profile-analyzer.js';
+import { matchKeyword } from './keyword-matcher.js';
 
 interface CollectedPerson {
   likedPosts: Array<{ postId: string; postUrl: string; likedAt: string }>;
-  comments: Array<{ postId: string; postUrl: string; commentedAt: string }>;
+  // `keyword` = mot-clé de campagne détecté EN LOCAL dans le texte du commentaire
+  // (jamais le texte brut). Présent seulement en cas de match.
+  comments: Array<{ postId: string; postUrl: string; commentedAt: string; keyword?: string }>;
 }
 
 export type ProEngPhase = 'run' | 'done';
@@ -34,6 +37,9 @@ export interface ProEngagementState {
   phase: ProEngPhase;
   ownUsername: string;
   targets: string[]; // usernames des People (minuscules)
+  // Mots-clés de campagne (« commente GUIDE ») à détecter dans les commentaires.
+  // Matchés en local ; seul le mot-clé trouvé est envoyé au backend.
+  keywords: string[];
   startedAt: number;
 }
 
@@ -48,6 +54,10 @@ const POSTS_MAX = 150;
 const MAX_FOLLOWING_PAGES = 20; // ~1000 abonnements lus max par compte
 const MAX_MUTUAL_PEOPLE = 10; // nb de People analysés pour les mutuelles par run
 const MAX_MUTUAL_MEMBERS = 50; // nb max de comptes en commun gardés par People
+
+// Commentaires : nb max de tours de scroll/chargement par post (borne le coût ;
+// au-delà, la liste est marquée partielle — voir loadComments).
+const MAX_COMMENT_LOAD_ROUNDS = 30;
 
 export class ProEngagementCollector {
   private overlay: ScanOverlay;
@@ -106,7 +116,7 @@ export class ProEngagementCollector {
    * Démarre l'analyse (depuis le popup). `ownUsername` = compte connecté ;
    * `targets` = usernames des People à suivre.
    */
-  async start(ownUsername: string, targets: string[]): Promise<void> {
+  async start(ownUsername: string, targets: string[], keywords: string[] = []): Promise<void> {
     if (!ownUsername) {
       this.overlay.showError('Connected account not found — open Instagram while logged in');
       return;
@@ -116,12 +126,13 @@ export class ProEngagementCollector {
       return;
     }
 
-    console.log(`✨ [ProEng] Démarrage pour @${ownUsername} — ${targets.length} People`);
+    console.log(`✨ [ProEng] Démarrage pour @${ownUsername} — ${targets.length} People, ${keywords.length} mot(s)-clé(s)`);
     this.stopRequested = false; // réarmer pour une nouvelle analyse
     await this.setState({
       phase: 'run',
       ownUsername,
       targets: targets.map((t) => t.toLowerCase()),
+      keywords: (keywords || []).filter((k) => typeof k === 'string' && k.trim()),
       startedAt: Date.now(),
     });
 
@@ -181,6 +192,8 @@ export class ProEngagementCollector {
     // Posts dont la liste des likers a été tronquée (plafond API/DOM) : une People
     // non détectée sur ces posts est incertaine, pas un "n'a pas liké" fiable.
     const partialLikePosts = new Set<string>();
+    // Idem pour les commentaires (plafond de scroll / réponses non dépliées).
+    const partialCommentPosts = new Set<string>();
     const collected: Record<string, CollectedPerson> = {};
     const ensure = (u: string): CollectedPerson => {
       if (!collected[u]) collected[u] = { likedPosts: [], comments: [] };
@@ -231,16 +244,24 @@ export class ProEngagementCollector {
       const root = this.getModalRoot();
       console.log(`🔎 [ProEng] Post ${next.postId} ouvert (href=${window.location.href})`);
 
-      // 1. Commentaires (tous) + date/heure. On charge d'abord plus de
-      //    commentaires (scroll + "voir plus") puis on extrait.
-      await this.loadComments(root);
+      // 1. Commentaires (tous) + date/heure. On charge d'abord un maximum de
+      //    commentaires (scroll résumable + dépliage des réponses) puis on extrait.
+      const { loaded: commentsLoaded, displayed: commentsDisplayed, truncated: commentsTruncated } =
+        await this.loadComments(root);
+      if (commentsTruncated) partialCommentPosts.add(next.postId);
       const nowIso = new Date().toISOString();
       let peopleComments = 0;
-      for (const { username, commentedAt } of this.extractComments(root)) {
+      for (const { username, commentedAt, text } of this.extractComments(root)) {
         trackEngager(username, next.postId, 'comment');
         if (state.targets.includes(username)) {
-          ensure(username).comments.push({ postId: next.postId, postUrl: next.postUrl, commentedAt });
-          console.log(`💬 [ProEng] @${username} a commenté ${next.postUrl} (${commentedAt})`);
+          // Détection du mot-clé de campagne EN LOCAL : on ne transmet que le
+          // mot-clé canonique trouvé, jamais le texte brut du commentaire.
+          const keyword = matchKeyword(text, state.keywords || []) || undefined;
+          ensure(username).comments.push({ postId: next.postId, postUrl: next.postUrl, commentedAt, keyword });
+          console.log(
+            `💬 [ProEng] @${username} a commenté ${next.postUrl} (${commentedAt})` +
+              (keyword ? ` — mot-clé « ${keyword} » ✨` : '')
+          );
           peopleComments++;
         }
       }
@@ -260,11 +281,13 @@ export class ProEngagementCollector {
       }
 
       // Résumé visible : confirme que la vérification a bien eu lieu (et signale
-      // si la liste des likers était partielle).
+      // si la liste des likers/commentaires était partielle).
       console.log(
         `🔍 [ProEng] Post ${next.postId} : ${likers.length} liker(s) lus` +
           (likersTruncated ? ` / ${likeTotal} affichés ⚠️ PARTIEL` : '') +
-          ` → ${peopleLikes} People ; ${peopleComments} commentaire(s) People`
+          ` ; ${commentsLoaded} commentaire(s) chargé(s)` +
+          (commentsTruncated ? ` / ${commentsDisplayed ?? '?'} affichés ⚠️ PARTIEL` : '') +
+          ` → ${peopleLikes} People (like) ; ${peopleComments} People (comment)`
       );
 
       // 3. Fermer la modale et passer au suivant.
@@ -289,7 +312,8 @@ export class ProEngagementCollector {
       engagersPayload,
       mutuals,
       state.ownUsername,
-      Array.from(partialLikePosts)
+      Array.from(partialLikePosts),
+      Array.from(partialCommentPosts)
     );
   }
 
@@ -348,30 +372,82 @@ export class ProEngagementCollector {
   }
 
   /**
-   * Charge davantage de commentaires dans la modale (scroll de la zone de
-   * commentaires + clic sur les boutons "voir plus de commentaires" / "+").
+   * Charge un maximum de commentaires dans la modale : scroll répété de la zone
+   * de commentaires + clic sur "voir plus de commentaires" ET "voir les réponses"
+   * (les réponses cachent des commentateurs). Résumable comme la liste des likers :
+   * on continue jusqu'à épuisement (le nombre de commentaires cesse de croître) ou
+   * jusqu'au plafond MAX_COMMENT_LOAD_ROUNDS.
+   *
+   * Renvoie de quoi juger la complétude :
+   *  - loaded    : nb de commentaires/réponses effectivement chargés (≈ nb de <time>)
+   *  - displayed : nb de commentaires affiché par le post (ou null si illisible)
+   *  - truncated : true si on a atteint le plafond en chargeant encore, ou si on a
+   *                lu nettement moins que le compteur affiché → un commentateur a
+   *                pu nous échapper (à traiter comme une absence incertaine).
    */
-  private async loadComments(root: HTMLElement): Promise<void> {
-    const scrollables = (Array.from(root.querySelectorAll('div, ul')) as HTMLElement[]).filter((el) => {
-      const st = getComputedStyle(el);
-      return (st.overflowY === 'auto' || st.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 20;
-    });
+  private async loadComments(
+    root: HTMLElement
+  ): Promise<{ loaded: number; displayed: number | null; truncated: boolean }> {
+    const displayed = this.extractCommentCount(root);
 
-    for (let i = 0; i < 5; i++) {
-      for (const s of scrollables) s.scrollTop = s.scrollHeight;
-      // Bouton "Voir plus de commentaires" / "Load more comments" / "+".
-      const more = (Array.from(root.querySelectorAll('button, [role="button"], span')) as HTMLElement[]).find(
-        (el) => {
-          const t = (el.textContent || '').trim().toLowerCase();
-          return (
-            /load more|view (all|more).*comment|plus de comment|voir.*comment|charger plus|afficher.*comment/.test(t) ||
-            t === '+'
-          );
+    const scrollables = () =>
+      (Array.from(root.querySelectorAll('div, ul')) as HTMLElement[]).filter((el) => {
+        const st = getComputedStyle(el);
+        return (st.overflowY === 'auto' || st.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 20;
+      });
+    // Boutons "voir plus de commentaires" + "voir les N réponses" (EN/FR).
+    const moreButtons = () =>
+      (Array.from(root.querySelectorAll('button, [role="button"], span')) as HTMLElement[]).filter((el) => {
+        if (el.querySelector('svg')) return false;
+        const t = (el.textContent || '').trim().toLowerCase();
+        if (!t || t.length > 60) return false;
+        return (
+          /load more|view (all|more).*comment|plus de comment|voir.*comment|charger plus|afficher.*comment|view.*repl|voir.*répons|afficher.*répons|hide.*repl/.test(
+            t
+          ) || t === '+'
+        );
+      });
+    // Chaque commentaire ET réponse porte un <time> → bon proxy de croissance
+    // (on retire l'horodatage du post lui-même).
+    const countLoaded = () => Math.max(0, root.querySelectorAll('time').length - 1);
+
+    let prev = -1;
+    let stuck = 0;
+    let round = 0;
+    for (; round < MAX_COMMENT_LOAD_ROUNDS && stuck < 4; round++) {
+      for (const s of scrollables()) s.scrollTop = s.scrollHeight;
+      for (const b of moreButtons().slice(0, 5)) {
+        try {
+          b.click();
+        } catch {
+          /* noop */
         }
-      );
-      more?.click();
-      await this.sleep(700);
+      }
+      await this.sleep(650 + Math.random() * 400);
+      const n = countLoaded();
+      stuck = n <= prev ? stuck + 1 : 0;
+      prev = n;
     }
+
+    const loaded = countLoaded();
+    // Sorti par plafond alors que ça chargeait encore (stuck < 4) → il en reste.
+    const reachedCap = round >= MAX_COMMENT_LOAD_ROUNDS && stuck < 4;
+    // On a lu nettement moins que le compteur affiché (réponses non dépliées,
+    // chargement bloqué…) → des commentateurs manquent.
+    const countShort = displayed != null && loaded < displayed * 0.8 && displayed - loaded > 5;
+    return { loaded, displayed, truncated: reachedCap || countShort };
+  }
+
+  /**
+   * Lit le nombre de commentaires AFFICHÉ sur le post ("View all 1,234 comments"
+   * / "Voir les 1 234 commentaires" / "1,234 comments"). Sert à détecter une
+   * liste de commentaires tronquée. Renvoie null si illisible.
+   */
+  private extractCommentCount(root: HTMLElement): number | null {
+    const m = (root.textContent || '').match(
+      /(?:view all|voir les|afficher les)?\s*([\d][\d.,\s]{0,11})\s*(?:comments?|commentaires?)/i
+    );
+    return m ? this.parseCountText(m[1]) : null;
   }
 
   /**
@@ -379,8 +455,8 @@ export class ProEngagementCollector {
    * Le filtrage People (targets) se fait au point d'appel ; on renvoie tout afin
    * d'alimenter aussi les suggestions de People.
    */
-  private extractComments(root: HTMLElement): Array<{ username: string; commentedAt: string }> {
-    const out: Array<{ username: string; commentedAt: string }> = [];
+  private extractComments(root: HTMLElement): Array<{ username: string; commentedAt: string; text: string }> {
+    const out: Array<{ username: string; commentedAt: string; text: string }> = [];
     const seen = new Set<string>();
 
     for (const a of Array.from(root.querySelectorAll('a[href^="/"]'))) {
@@ -394,26 +470,52 @@ export class ProEngagementCollector {
       // remonte quelques niveaux jusqu'à trouver un <time> dans un bloc de
       // taille raisonnable (évite les liens "Aimé par …" qui n'ont pas de <time>
       // et le conteneur global de la modale).
-      const dt = this.findCommentTime(a);
-      if (!dt) continue;
+      const block = this.findCommentBlock(a);
+      if (!block) continue;
 
       seen.add(username);
-      out.push({ username, commentedAt: dt });
+      out.push({
+        username,
+        commentedAt: block.dt,
+        text: this.extractCommentText(block.node, username),
+      });
     }
     return out;
   }
 
-  /** Cherche l'horodatage (<time datetime>) associé au lien auteur d'un commentaire. */
-  private findCommentTime(authorLink: Element): string | null {
+  /**
+   * Bloc d'un commentaire : conteneur (taille raisonnable) portant à la fois le
+   * lien auteur et un <time datetime>. Renvoie le nœud + l'horodatage.
+   */
+  private findCommentBlock(authorLink: Element): { node: Element; dt: string } | null {
     let node: Element | null = authorLink;
     for (let i = 0; i < 6 && node; i++) {
       const timeEl = node.querySelector?.('time') as HTMLTimeElement | null;
       const dt = timeEl?.getAttribute('datetime');
       // Conteneur de taille raisonnable → bloc d'un commentaire, pas la modale entière.
-      if (dt && (node.textContent || '').length < 500) return dt;
+      if (dt && (node.textContent || '').length < 500) return { node, dt };
       node = node.parentElement;
     }
     return null;
+  }
+
+  /**
+   * Extrait le corps du commentaire (pour la détection de mot-clé EN LOCAL). On
+   * retire les liens (auteur/mentions), l'horodatage et les boutons d'action
+   * (Répondre/J'aime) afin de ne garder que le texte tapé par la personne. Ce
+   * texte NE quitte PAS l'extension : seul le mot-clé éventuellement détecté est
+   * transmis.
+   */
+  private extractCommentText(container: Element, username: string): string {
+    try {
+      const clone = container.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('a, time, button, [role="button"], svg').forEach((el) => el.remove());
+      const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+      return text;
+    } catch {
+      // Repli : texte brut du conteneur moins le username connu.
+      return (container.textContent || '').replace(new RegExp(username, 'ig'), ' ').replace(/\s+/g, ' ').trim();
+    }
   }
 
   /**
@@ -981,7 +1083,8 @@ export class ProEngagementCollector {
     engagers: Array<{ username: string; posts: number; liked: boolean; commented: boolean }>,
     mutuals: Array<{ username: string; count: number; members: string[] }>,
     ownUsername: string,
-    partialLikePosts: string[]
+    partialLikePosts: string[],
+    partialCommentPosts: string[]
   ): Promise<void> {
     this.overlay.show('Updating stats…');
     const postsAnalyzed = analyzedPosts.length;
@@ -1007,9 +1110,11 @@ export class ProEngagementCollector {
         analyzedPosts,
         engagers,
         mutuals,
-        // Posts dont la liste des likers était tronquée (plafond IG) : le backend
-        // ne doit pas en déduire qu'une People "n'a pas liké" avec certitude.
+        // Posts dont la liste des likers OU des commentaires était tronquée
+        // (plafond IG) : le backend ne doit pas en déduire qu'une People "n'a pas
+        // interagi" avec certitude.
         partialLikePosts,
+        partialCommentPosts,
         // Compte RÉELLEMENT analysé (profil scanné) → le backend attribue
         // l'engagement à ce compte, pas au compte actif de la session.
         ownUsername,
@@ -1017,8 +1122,8 @@ export class ProEngagementCollector {
       if (resp?.success) {
         const totalLikes = engagements.reduce((s, e) => s + e.likedPosts.length, 0);
         const totalComments = engagements.reduce((s, e) => s + e.comments.length, 0);
-        const partialNote =
-          partialLikePosts.length > 0 ? ` (${partialLikePosts.length} post(s) à liste partielle)` : '';
+        const partialCount = new Set([...partialLikePosts, ...partialCommentPosts]).size;
+        const partialNote = partialCount > 0 ? ` (${partialCount} post(s) à liste partielle)` : '';
         this.overlay.showSuccess(
           `Analysis complete! ${totalLikes} like(s) + ${totalComments} comment(s) across ${postsAnalyzed} posts · ${engagers.length} suggestion(s)${partialNote}`
         );

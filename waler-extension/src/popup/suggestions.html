@@ -287,16 +287,16 @@
 </head>
 <body>
   <div class="container">
-    <button class="back-button" id="back-btn">← Back</button>
+    <button class="back-button" id="back-btn" data-i18n="suggestions.back">← Back</button>
 
     <div class="header">
       <div class="logo">💡 Suggestions</div>
-      <div class="subtitle">Automatic classifications</div>
+      <div class="subtitle" data-i18n="suggestions.subtitle">Automatic classifications</div>
     </div>
 
     <div id="loading" class="loading">
       <div class="spinner"></div>
-      <div>Loading...</div>
+      <div data-i18n="common.loading">Loading...</div>
     </div>
 
     <div id="content" style="display: none;">
@@ -310,11 +310,11 @@
 
       <div id="empty-state" class="empty-state" style="display: none;">
         <div class="empty-icon">✨</div>
-        <div class="empty-text">No suggestions yet</div>
+        <div class="empty-text" data-i18n="suggestions.empty">No suggestions yet</div>
       </div>
     </div>
   </div>
 
-  <script src="suggestions.js"></script>
+  <script type="module" src="suggestions.js"></script>
 </body>
 </html>

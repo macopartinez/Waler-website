@@ -43,7 +43,9 @@ export default function UpgradeToPro() {
   const premiumMonthly = 4.99;
   const proMonthly = 19.99;
   const premiumYearlyOffer = 47.99;
-  const proYearlyOffer = 239.88;
+  // Prix annuel « offre » remisé (~20%), aligné sur le serveur/Stripe
+  // (plans.ts : 19199 centimes). 12× le mensuel = 239.88 = aucune remise.
+  const proYearlyOffer = 191.99;
   const premiumYearlyStandard = yearlyStandardPrice(premiumMonthly);
   const proYearlyStandard = yearlyStandardPrice(proMonthly);
 

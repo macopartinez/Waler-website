@@ -371,6 +371,38 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: a
         }
         break;
 
+      case 'GET_PRO_KEYWORDS':
+        // Mots-clés de campagne du compte actif (mécanique « commente GUIDE »).
+        // Même résolution de compte que GET_PEOPLE. Renvoie une liste de chaînes.
+        try {
+          const activeStoreK = await chrome.storage.local.get('activeDsUserId');
+          const regK = await accountGet('accountRegistry');
+          const activeEntryK = regK.accountRegistry?.accounts?.[activeStoreK.activeDsUserId];
+          const activeAccIdK = activeEntryK?.accountId;
+          const activeUserK = message.username || activeEntryK?.igUsername;
+          const kwParams = new URLSearchParams();
+          if (activeUserK) kwParams.set('username', activeUserK);
+          if (activeAccIdK) kwParams.set('accountId', String(activeAccIdK));
+          const kwQs = kwParams.toString();
+          const kwResp = await fetch(`${API_BASE}/api/extension/pro-keywords${kwQs ? `?${kwQs}` : ''}`, {
+            method: 'GET',
+            credentials: 'include',
+          });
+          if (!kwResp.ok) {
+            console.warn('⚠️ GET_PRO_KEYWORDS: HTTP', kwResp.status);
+            sendResponse({ success: false, error: `HTTP ${kwResp.status}`, keywords: [] });
+            break;
+          }
+          const kwData = await kwResp.json();
+          const keywords = (kwData.keywords || []).map((k: any) => k.keyword).filter(Boolean);
+          console.log(`🔎 GET_PRO_KEYWORDS résultat → ${keywords.length} mot(s)-clé(s)`, keywords);
+          sendResponse({ success: true, keywords });
+        } catch (error: any) {
+          console.error('Error fetching pro keywords:', error);
+          sendResponse({ success: false, error: error.message, keywords: [] });
+        }
+        break;
+
       case 'RESTORE_FOLLOWERS':
         // Récupère les followers du compte actif depuis le backend (Postgres) pour
         // reconstruire la base locale sans re-scanner Instagram. credentials:'include'
@@ -584,9 +616,11 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: a
               analyzedPosts: message.analyzedPosts || [],
               engagers: message.engagers || [],
               mutuals: message.mutuals || [],
-              // Posts à liste de likers tronquée (plafond IG) : une People non vue
-              // sur ces posts est incertaine, pas un "n'a pas liké" fiable.
+              // Posts à liste de likers/commentaires tronquée (plafond IG) : une
+              // People non vue sur ces posts est incertaine, pas un "n'a pas
+              // interagi" fiable.
               partialLikePosts: message.partialLikePosts || [],
+              partialCommentPosts: message.partialCommentPosts || [],
               ownUsername: message.ownUsername || '',
             }),
           });

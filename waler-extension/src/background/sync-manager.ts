@@ -96,10 +96,15 @@ export class SyncManager {
       return;
     }
 
-    const stored = await accountGet(['syncQueue', 'userId', 'apiToken', 'isAuthenticated', 'userInfo']);
+    const stored = await accountGet(['syncQueue', 'userId', 'apiToken', 'isAuthenticated', 'userInfo', 'subscriptionActive']);
 
     if (!stored.isAuthenticated || !stored.userId) {
       console.log('❌ Not authenticated, skipping sync');
+      return;
+    }
+
+    if (stored.subscriptionActive === false) {
+      console.log('🚫 Subscription inactive, skipping sync');
       return;
     }
 
@@ -254,11 +259,16 @@ export class SyncManager {
     try {
       console.log('🔄 Starting full database sync...');
 
-      const stored = await accountGet(['followerDatabase', 'userId', 'apiToken', 'isAuthenticated']);
+      const stored = await accountGet(['followerDatabase', 'userId', 'apiToken', 'isAuthenticated', 'subscriptionActive']);
 
       if (!stored.isAuthenticated || !stored.userId) {
         console.log('❌ Not authenticated, cannot sync');
         return { success: false, error: 'Not authenticated' };
+      }
+
+      if (stored.subscriptionActive === false) {
+        console.log('🚫 Subscription inactive, cannot sync');
+        return { success: false, error: 'Subscription inactive' };
       }
 
       const db = stored.followerDatabase;

@@ -31,6 +31,9 @@ export interface ThreadScrollOptions {
    * = première analyse → scroll complet jusqu'au début de la conversation.
    */
   knownKeys?: Set<string>;
+  /** Interruption coopérative : si fourni et renvoie true, le scroll s'arrête
+   *  proprement (bouton d'arrêt global). Vérifié à chaque itération. */
+  shouldStop?: () => boolean;
 }
 
 export class DMThreadScroller {
@@ -39,6 +42,7 @@ export class DMThreadScroller {
   private scrollDelay: number;
   private onProgress?: (count: number) => void;
   private knownKeys?: Set<string>;
+  private shouldStop?: () => boolean;
 
   /** Reçu de lecture (« Vu ») détecté sous le dernier message envoyé. */
   public lastSeenDetected = false;
@@ -51,6 +55,7 @@ export class DMThreadScroller {
     this.scrollDelay = options.scrollDelay ?? 300;
     this.onProgress = options.onProgress;
     this.knownKeys = options.knownKeys && options.knownKeys.size > 0 ? options.knownKeys : undefined;
+    this.shouldStop = options.shouldStop;
   }
 
   /** Vrai si l'on a rejoint la frontière de l'historique déjà enregistré. */
@@ -238,6 +243,11 @@ export class DMThreadScroller {
     let attempts = 0;
 
     while (stuck < this.maxStuckAttempts) {
+      // Arrêt global demandé → on rend ce qui a été collecté jusqu'ici.
+      if (this.shouldStop?.()) {
+        console.log('⏹ [Pro] Scroll interrompu (arrêt global).');
+        break;
+      }
       attempts++;
       const before = this.extractor.size;
       const beforeHeight = container.scrollHeight;

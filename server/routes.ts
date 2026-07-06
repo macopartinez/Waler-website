@@ -98,16 +98,31 @@ function subscriptionPeriodEnd(sub: any): Date | undefined {
   return stripeTs(sub?.current_period_end ?? sub?.items?.data?.[0]?.current_period_end);
 }
 
+// Garantit (une fois par process) la présence de la colonne keyword_hits, lue par
+// computeRelationshipScore. Cette fonction est appelée aussi depuis le mode Base
+// (emitRelationshipSignal), dont les routes n'exécutent pas les ALTER de /pro-engagement.
+let keywordHitsColumnEnsured = false;
+function ensureKeywordHitsColumn(sqlite: any): void {
+  if (keywordHitsColumnEnsured) return;
+  try {
+    sqlite.prepare(`ALTER TABLE circle_members ADD COLUMN keyword_hits INTEGER DEFAULT 0`).run();
+  } catch {
+    /* colonne déjà existante */
+  }
+  keywordHitsColumnEnsured = true;
+}
+
 /**
  * Calcule le score de relation (0-100) d'un membre du cercle à partir de ses
  * stats et de sa timeline. Portage de calculate_relationship_score() de
  * l'ancien agent Python (agent_pro_circle.py).
  */
 function computeRelationshipScore(sqlite: any, memberId: number): number {
+  ensureKeywordHitsColumn(sqlite);
   const m = sqlite.prepare(`
     SELECT total_likes_given, total_likes_received,
            consecutive_likes_streak, days_since_first_like,
-           mutual_followers_count
+           mutual_followers_count, keyword_hits
     FROM circle_members WHERE id = ?
   `).get(memberId) as any;
   if (!m) return 0;
@@ -118,6 +133,9 @@ function computeRelationshipScore(sqlite: any, memberId: number): number {
   score += Math.min((m.consecutive_likes_streak || 0) * 4, 20); // streak (max 20)
   score += Math.min(Math.floor((m.days_since_first_like || 0) / 7), 15); // ancienneté (max 15)
   score += Math.min(m.mutual_followers_count || 0, 15);       // connexions mutuelles (max 15)
+  // Commentaire mot-clé de campagne (« commente GUIDE ») = signal d'INTENTION
+  // fort (lead magnet) : gros bonus, juste après une conversation qualifiée.
+  score += Math.min((m.keyword_hits || 0) * 12, 30);          // hits mot-clé (max 30)
 
   const events = sqlite.prepare(`
     SELECT event_type, COUNT(*) as count
@@ -2369,6 +2387,130 @@ export async function registerRoutes(
     }
   });
 
+  // ===== Mots-clés de campagne (mécanique « commente GUIDE ») =====
+  // Liste de mots-clés PAR COMPTE Instagram. L'extension matche EN LOCAL les
+  // commentaires des People contre cette liste (fuzzy) et ne renvoie que le
+  // mot-clé détecté. La table vit dans waler.db (comme circle_members), scopée
+  // par le bucket du compte (users.id).
+  const KEYWORD_MAX = 30; // plafond de mots-clés par compte
+  const KEYWORD_MAXLEN = 40;
+  const ensureKeywordTable = (sqlite: any) => {
+    sqlite.prepare(`
+      CREATE TABLE IF NOT EXISTS pro_keywords (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL,
+        keyword TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(account_id, keyword)
+      )
+    `).run();
+  };
+  // Résout le bucket waler.db du compte visé : username explicite prioritaire
+  // (accountUsername ou username), puis accountId possédé, puis compte de session.
+  // `create` = crée le bucket si absent (écriture) ; sinon renvoie null (lecture).
+  const resolveKeywordAccount = async (
+    req: any,
+    sqlite: any,
+    create: boolean
+  ): Promise<number | null> => {
+    const ownerId = getCurrentUser(req);
+    let userId = getActiveAccount(req) as number | null;
+    const rawId = req.query.accountId ?? req.body?.accountId;
+    const acctId = rawId != null ? Number(rawId) : null;
+    if (acctId && ownerId && (await isAccountOwnedBy(acctId, ownerId))) userId = acctId;
+    const uname = req.query.accountUsername || req.query.username || req.body?.accountUsername || req.body?.username;
+    if (uname) {
+      const name = String(uname);
+      return create ? ensureWalerUserId(sqlite, name) : resolveWalerUserId(sqlite, name);
+    }
+    return userId || null;
+  };
+  const listKeywords = (sqlite: any, accountId: number) =>
+    (sqlite.prepare(
+      `SELECT id, keyword FROM pro_keywords WHERE account_id = ? ORDER BY created_at ASC, id ASC`
+    ).all(accountId) as Array<{ id: number; keyword: string }>);
+
+  app.get("/api/extension/pro-keywords", requireAuth, async (req, res) => {
+    try {
+      const dbPath = path.join(moduleDir, "waler.db");
+      const sqlite = new Database(dbPath);
+      ensureKeywordTable(sqlite);
+      const accountId = await resolveKeywordAccount(req, sqlite, false);
+      if (!accountId) {
+        sqlite.close();
+        return res.json({ success: true, keywords: [] });
+      }
+      const keywords = listKeywords(sqlite, accountId);
+      sqlite.close();
+      res.json({ success: true, keywords });
+    } catch (error: any) {
+      console.error("List pro-keywords error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/extension/pro-keywords", requireAuth, requireActiveSubscription, async (req, res) => {
+    try {
+      const raw = String(req.body?.keyword || "").trim().replace(/\s+/g, " ");
+      if (!raw) return res.status(400).json({ success: false, message: "keyword required" });
+      if (raw.length > KEYWORD_MAXLEN) {
+        return res.status(400).json({ success: false, message: "keyword too long" });
+      }
+
+      const dbPath = path.join(moduleDir, "waler.db");
+      const sqlite = new Database(dbPath);
+      ensureKeywordTable(sqlite);
+      const accountId = await resolveKeywordAccount(req, sqlite, true);
+      if (!accountId) {
+        sqlite.close();
+        return res.status(401).json({ success: false, message: "Non authentifié" });
+      }
+
+      const count = (sqlite.prepare(`SELECT COUNT(*) AS n FROM pro_keywords WHERE account_id = ?`).get(accountId) as { n: number }).n;
+      // Dédup insensible à la casse (on garde la casse CANONIQUE saisie pour l'UI).
+      const dup = sqlite.prepare(
+        `SELECT 1 FROM pro_keywords WHERE account_id = ? AND lower(keyword) = lower(?) LIMIT 1`
+      ).get(accountId, raw);
+      if (!dup) {
+        if (count >= KEYWORD_MAX) {
+          sqlite.close();
+          return res.status(400).json({ success: false, message: `Max ${KEYWORD_MAX} keywords` });
+        }
+        sqlite.prepare(`INSERT INTO pro_keywords (account_id, keyword) VALUES (?, ?)`).run(accountId, raw);
+      }
+      const keywords = listKeywords(sqlite, accountId);
+      sqlite.close();
+      res.json({ success: true, keywords });
+    } catch (error: any) {
+      console.error("Add pro-keyword error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  app.delete("/api/extension/pro-keywords/:id", requireAuth, requireActiveSubscription, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!id) return res.status(400).json({ success: false, message: "invalid id" });
+
+      const dbPath = path.join(moduleDir, "waler.db");
+      const sqlite = new Database(dbPath);
+      ensureKeywordTable(sqlite);
+      const accountId = await resolveKeywordAccount(req, sqlite, false);
+      if (!accountId) {
+        sqlite.close();
+        return res.status(401).json({ success: false, message: "Non authentifié" });
+      }
+      // Suppression scopée au compte : on ne peut pas supprimer le mot-clé d'un autre.
+      sqlite.prepare(`DELETE FROM pro_keywords WHERE id = ? AND account_id = ?`).run(id, accountId);
+      const keywords = listKeywords(sqlite, accountId);
+      sqlite.close();
+      res.json({ success: true, keywords });
+    } catch (error: any) {
+      console.error("Delete pro-keyword error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
   // Stats d'engagement des "people" (circle_members) — lues par le dashboard Pro
   // pour refléter les likes/commentaires collectés par l'extension
   // (/api/extension/pro-engagement). Renvoie score, likes, connexions mutuelles
@@ -2419,6 +2561,12 @@ export async function registerRoutes(
           /* colonne déjà existante */
         }
       }
+      // Compteur de commentaires « mot-clé » (créé par /pro-engagement) — garanti ici.
+      try {
+        sqlite.prepare(`ALTER TABLE circle_members ADD COLUMN keyword_hits INTEGER DEFAULT 0`).run();
+      } catch {
+        /* colonne déjà existante */
+      }
       // Colonnes de l'axe « température » sur contact_scores (créées par
       // /analyze-contact) — garanties ici pour que le JOIN ne casse pas.
       for (const col of ['temperature TEXT', 'dynamics TEXT', 'advice TEXT', 'setting_phase TEXT', 'setting_summary TEXT']) {
@@ -2432,7 +2580,7 @@ export async function registerRoutes(
       const members = sqlite.prepare(`
         SELECT cm.id, cm.member_username, cm.relationship_score, cm.total_likes_given,
                cm.last_like_given_at, cm.mutual_followers_count, cm.mutual_followers_list,
-               cm.consecutive_likes_streak,
+               cm.consecutive_likes_streak, cm.keyword_hits,
                cm.engagement_pattern, cm.follows_you, cm.you_follow,
                cs.temperature, cs.dynamics, cs.advice, cs.setting_phase, cs.setting_summary
         FROM circle_members cm
@@ -2485,16 +2633,21 @@ export async function registerRoutes(
           })),
           ...comments.map((c) => {
             let postUrl: string | null = null;
+            let keyword: string | null = null;
             try {
-              postUrl = JSON.parse(c.event_data || '{}').postUrl || null;
+              const parsed = JSON.parse(c.event_data || '{}');
+              postUrl = parsed.postUrl || null;
+              keyword = parsed.keyword || null;
             } catch {
               /* event_data non JSON */
             }
             return {
               type: 'comment' as const,
               timestamp: c.detected_at,
-              description: 'A commenté une de vos publications',
+              // Commentaire mot-clé de campagne → libellé dédié (signal d'intention).
+              description: keyword ? `A commenté le mot-clé « ${keyword} »` : 'A commenté une de vos publications',
               postUrl,
+              keyword,
             };
           }),
           ...(relationStmt.all(m.id) as any[]).map((r) => ({
@@ -2502,6 +2655,7 @@ export async function registerRoutes(
             timestamp: r.detected_at,
             description: RELATION_LABELS[r.event_type] || r.event_type,
             postUrl: null,
+            keyword: null as string | null,
           })),
         ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
@@ -2567,6 +2721,7 @@ export async function registerRoutes(
           youFollow: m.you_follow === null || m.you_follow === undefined ? null : !!m.you_follow,
           connectionDays,
           streak: m.consecutive_likes_streak ?? 0,
+          keywordHits: m.keyword_hits ?? 0,
           engagementPattern,
           signals,
           temperature: m.temperature || null,
@@ -3050,19 +3205,21 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Non authentifié" });
       }
 
-      const { engagements, analyzedPosts, engagers, mutuals, partialLikePosts, ownUsername } = req.body as {
+      const { engagements, analyzedPosts, engagers, mutuals, partialLikePosts, partialCommentPosts, ownUsername } = req.body as {
         engagements?: Array<{
           username: string;
           likedPosts?: Array<{ postId: string; postUrl?: string; likedAt?: string }>;
-          comments?: Array<{ postId: string; postUrl?: string; commentedAt?: string }>;
+          comments?: Array<{ postId: string; postUrl?: string; commentedAt?: string; keyword?: string }>;
         }>;
         analyzedPosts?: string[]; // ids des posts analysés, du + récent au + ancien
         engagers?: Array<{ username: string; posts: number; liked?: boolean; commented?: boolean }>;
         mutuals?: Array<{ username: string; count: number; members?: string[] }>;
-        // Posts dont la liste des likers était TRONQUÉE (plafond IG). Sur ces posts,
-        // ne pas avoir vu une People ne prouve PAS qu'elle n'a pas liké : on traite
-        // l'absence comme incertaine (ni rupture de streak, ni gap de timeline).
+        // Posts dont la liste des likers / des commentaires était TRONQUÉE (plafond
+        // IG). Sur ces posts, ne pas avoir vu une People ne prouve PAS qu'elle n'a
+        // pas interagi : on traite l'absence comme incertaine (ni rupture de streak,
+        // ni gap de timeline).
         partialLikePosts?: string[];
+        partialCommentPosts?: string[];
         ownUsername?: string; // compte (profil) réellement analysé par l'extension
       };
 
@@ -3084,8 +3241,13 @@ export async function registerRoutes(
       }
       const orderedPosts = Array.isArray(analyzedPosts) ? analyzedPosts : [];
       const engagerList = Array.isArray(engagers) ? engagers : [];
-      // Posts à liste de likers incomplète → l'absence d'une People y est incertaine.
-      const partialSet = new Set<string>(Array.isArray(partialLikePosts) ? partialLikePosts : []);
+      // Posts à liste de likers OU de commentaires incomplète → l'absence d'une
+      // People y est incertaine (like et commentaire concourent tous deux au
+      // calcul "a interagi"). On unit les deux dimensions.
+      const partialSet = new Set<string>([
+        ...(Array.isArray(partialLikePosts) ? partialLikePosts : []),
+        ...(Array.isArray(partialCommentPosts) ? partialCommentPosts : []),
+      ]);
       // Map username (minuscule) → nb de connexions mutuelles + liste des comptes en commun.
       const mutualByUser = new Map<string, number>();
       const mutualMembersByUser = new Map<string, string[]>();
@@ -3120,6 +3282,14 @@ export async function registerRoutes(
       // Colonne pour la LISTE des comptes en commun (JSON), en plus du compteur.
       try {
         sqlite.prepare(`ALTER TABLE circle_members ADD COLUMN mutual_followers_list TEXT`).run();
+      } catch {
+        /* colonne déjà existante */
+      }
+
+      // Compteur de commentaires « mot-clé » (campagne lead magnet) — alimente le
+      // score (signal d'intention). Recalculé à chaque sync depuis timeline_events.
+      try {
+        sqlite.prepare(`ALTER TABLE circle_members ADD COLUMN keyword_hits INTEGER DEFAULT 0`).run();
       } catch {
         /* colonne déjà existante */
       }
@@ -3218,19 +3388,33 @@ export async function registerRoutes(
           }
 
           let comments = 0;
+          // Mot-clé de campagne détecté (en local par l'extension) par post → sert
+          // aussi à annoter la timeline d'engagement plus bas.
+          const keywordByPost = new Map<string, string>();
           for (const c of eng.comments || []) {
             if (!c?.postId) continue;
+            const keyword = typeof c.keyword === "string" && c.keyword.trim() ? c.keyword.trim() : null;
+            if (keyword) keywordByPost.set(c.postId, keyword);
             // Dédoublonnage : un seul événement "comment" par (membre, post).
             if (commentExists.get(memberId, `%"postId":"${c.postId}"%`)) continue;
             insertEvent.run(
               memberId,
-              JSON.stringify({ postId: c.postId, postUrl: c.postUrl || null }),
+              JSON.stringify({ postId: c.postId, postUrl: c.postUrl || null, keyword }),
               c.commentedAt || new Date().toISOString()
             );
             comments++;
           }
 
           updateLikeStats.run(memberId, memberId, memberId);
+
+          // Recalcule le nombre de commentaires « mot-clé » (event_data porte une
+          // clé "keyword" non nulle) → nourrit le score comme signal d'intention.
+          const kwHits = (sqlite.prepare(
+            `SELECT COUNT(*) AS n FROM timeline_events
+             WHERE circle_member_id = ? AND event_type = 'comment'
+               AND event_data LIKE '%"keyword":"%'`
+          ).get(memberId) as { n: number }).n;
+          sqlite.prepare(`UPDATE circle_members SET keyword_hits = ? WHERE id = ?`).run(kwHits, memberId);
 
           // Streak de présence : nombre de posts CONSÉCUTIFS (du + récent au +
           // ancien) où la personne a interagi (like OU commentaire), jusqu'au
@@ -3242,9 +3426,9 @@ export async function registerRoutes(
           let streak = 0;
           for (const pid of orderedPosts) {
             if (interacted.has(pid)) streak++;
-            // Post à liste de likers tronquée sans interaction VUE : on ne peut pas
-            // affirmer l'absence → on n'interrompt pas le streak (mais on ne le
-            // crédite pas non plus, faute de preuve).
+            // Post à liste de likers/commentaires tronquée sans interaction VUE :
+            // on ne peut pas affirmer l'absence → on n'interrompt pas le streak
+            // (mais on ne le crédite pas non plus, faute de preuve).
             else if (partialSet.has(pid)) continue;
             else break;
           }
@@ -3276,13 +3460,15 @@ export async function registerRoutes(
                 postUrl: urlById.get(pid) || `https://www.instagram.com/p/${pid}/`,
                 liked,
                 commented,
+                // Mot-clé de campagne détecté dans le commentaire de ce post (si présent).
+                keyword: keywordByPost.get(pid) || null,
                 timestamp: tsById.get(pid) || null,
                 gapBefore: gap,
               });
               gap = 0;
             } else if (partialSet.has(pid)) {
-              // Liste des likers incomplète : on ne compte PAS ce post comme une
-              // rupture (une interaction a pu nous échapper) — gap inchangé.
+              // Liste des likers/commentaires incomplète : on ne compte PAS ce post
+              // comme une rupture (une interaction a pu nous échapper) — gap inchangé.
             } else {
               gap++;
             }

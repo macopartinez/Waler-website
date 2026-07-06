@@ -28,7 +28,9 @@ const PLAN_META: Plan[] = [
   {
     id: 'pro',
     priceMonthly: 19.99,
-    priceYearly: 239.88,
+    // Prix annuel « offre » remisé (~20%), aligné sur le serveur/Stripe
+    // (plans.ts : 19199 centimes). 12× le mensuel = 239.88 sans remise.
+    priceYearly: 191.99,
     icon: Crown,
     popular: true,
   },

@@ -24,6 +24,7 @@ import {
   isAccountLinked,
 } from '../background/account-storage.js';
 import { maybePromptAccountLink, autoLinkPrimaryAccount } from './account-linker.js';
+import { startBaseline, completeBaseline, triggerBackoff } from './scan-budget.js';
 
 // Interfaces pour la base de données de followers
 interface FollowerEntry {
@@ -172,6 +173,17 @@ class InstagramTracker {
         return;
       }
       console.log('ℹ️ Pseudo du compte connecté non résolu pour l\'instant — poursuite (retry ultérieur).');
+    }
+
+    // GATE ABONNEMENT : si le login Waler a un abonnement explicitement inactif
+    // (Stripe annulé, past_due, etc.), on arrête tout tracking ici. On ne bloque
+    // QUE sur `false` explicite — `undefined` (flag jamais encore récupéré, ex.
+    // tout premier lancement avant la 1ère synchro) laisse passer, pour ne pas
+    // bloquer un nouvel utilisateur avant que son statut soit connu.
+    const subStatus = await chrome.storage.local.get('subscriptionActive');
+    if (subStatus.subscriptionActive === false) {
+      console.log('🚫 Abonnement Waler inactif — tracking désactivé.');
+      return;
     }
 
     console.log(`✅ Tracking account: @${this.currentUsername}${this.loggedInUsernameVerified ? '' : ' (non vérifié)'}`);
@@ -1525,9 +1537,19 @@ class InstagramTracker {
    *   2. Sinon → on va sur le profil si besoin (le lien followers n'existe que là),
    *      on cherche le lien avec plusieurs stratégies + retries, on clique, puis on
    *      renvoie le modal.
+   *
+   * `options.navigate` (défaut true) : si false, on N'effectue PAS de
+   * `window.location.href` — utile pour un scan déjà en cours qu'un rechargement
+   * tuerait ; dans ce cas, hors du profil, on renvoie null et l'appelant gère son
+   * propre repli.
+   *
    * Renvoie l'élément modal, ou null si impossible à ouvrir.
    */
-  private async ensureFollowersModalOpen(): Promise<Element | null> {
+  private async ensureFollowersModalOpen(
+    options: { navigate?: boolean } = {}
+  ): Promise<Element | null> {
+    const { navigate = true } = options;
+
     // 1. Déjà ouvert ? On le renvoie sans naviguer (évite tout effet de bord).
     let modal = document.querySelector('[role="dialog"]');
     if (modal) {
@@ -1537,42 +1559,43 @@ class InstagramTracker {
 
     // 2. Aller sur le profil si nécessaire (le lien followers n'y est sinon pas).
     if (!this.isOnOwnProfile()) {
+      if (!navigate) {
+        console.log('ℹ️ Hors du profil et navigate=false → ouverture du modal impossible ici');
+        return null;
+      }
       console.log(`📍 Navigating to profile: /${this.currentUsername}`);
       window.location.href = `/${this.currentUsername}`;
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
-    // 3. Chercher le lien followers avec plusieurs stratégies + retries.
-    console.log('🔍 Searching for followers link...');
-    let followersLink: HTMLAnchorElement | null = null;
-    let attempts = 0;
+    // 3. Trouver l'élément followers avec retries. Instagram ne rend plus le
+    //    compteur comme un <a href="/…/followers/"> : c'est désormais un bouton
+    //    React (`<a href="#">211 followers</a>`) ouvrant le modal via onClick.
+    //    On cible donc par TEXTE ("followers"/"abonnés"), pas par href.
+    console.log('🔍 Searching for followers button...');
+    let followersEl: HTMLElement | null = null;
     const maxAttempts = 10;
-    while (!followersLink && attempts < maxAttempts) {
-      followersLink = document.querySelector(`a[href="/${this.currentUsername}/followers/"]`) as HTMLAnchorElement;
-      if (!followersLink) {
-        followersLink = document.querySelector(`a[href*="/followers/"]`) as HTMLAnchorElement;
-      }
-      if (!followersLink) {
-        const links = Array.from(document.querySelectorAll('a'));
-        followersLink = links.find(link => link.href.includes('/followers/')) as HTMLAnchorElement;
-      }
-      if (!followersLink) {
-        attempts++;
+    for (let attempts = 1; attempts <= maxAttempts && !followersEl; attempts++) {
+      followersEl = this.findFollowersButton();
+      if (!followersEl) {
         console.log(`⏳ Attempt ${attempts}/${maxAttempts} - Waiting for page to load...`);
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
-    if (!followersLink) {
-      console.error('❌ Followers link not found after multiple attempts');
+    if (!followersEl) {
+      console.error('❌ Followers button not found after multiple attempts');
       return null;
     }
 
-    // 4. Cliquer et confirmer l'ouverture.
-    console.log('✅ Followers link found:', followersLink.href);
-    followersLink.click();
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // 4. Cliquer l'élément (le onClick React ouvre le modal, sans recharger).
+    console.log('✅ Followers button found:', followersEl.tagName, `"${(followersEl.textContent || '').trim().slice(0, 30)}"`);
+    followersEl.click();
 
+    // Laisser le onClick ouvrir le modal (léger polling plutôt qu'une attente fixe).
+    for (let i = 0; i < 12 && !document.querySelector('[role="dialog"]'); i++) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
     modal = document.querySelector('[role="dialog"]');
     if (!modal) {
       console.log('❌ Followers modal not found after click');
@@ -1580,6 +1603,45 @@ class InstagramTracker {
     }
     console.log('✅ Modal opened successfully');
     return modal;
+  }
+
+  /**
+   * Localise l'élément cliquable "followers" du header de profil, robuste aux
+   * changements de DOM d'Instagram :
+   *   1. Ancien rendu : <a href="/username/followers/"> (si jamais réintroduit).
+   *   2. Rendu actuel : bouton React `<a href="#">211 followers</a>` — on cible
+   *      par TEXTE ("followers"/"abonnés", multi-locale) et on remonte à
+   *      l'ancêtre cliquable. Le lien /followers/ n'existant plus, le href ne
+   *      sert plus de repère.
+   * Renvoie l'élément à cliquer, ou null.
+   */
+  private findFollowersButton(): HTMLElement | null {
+    // 1. Ancien lien href (compat).
+    const legacy = document.querySelector<HTMLElement>(
+      `a[href="/${this.currentUsername}/followers/"], a[href$="/followers/"]`
+    );
+    if (legacy) return legacy;
+
+    // 2. Rendu actuel : élément textuel "followers"/"abonnés" → ancêtre cliquable.
+    //    On borne la longueur pour éviter de matcher un paragraphe qui contient
+    //    le mot, et on privilégie le 1er (le stat du header est en haut du DOM).
+    const labelRe = /\bfollowers?\b|\babonn[ée]?s?\b/i;
+    const candidates = Array.from(
+      document.querySelectorAll<HTMLElement>('header a, header div, header span, a, div, span')
+    );
+    // Les éléments "211 followers" sont imbriqués (div > a[href="#"] > span) et
+    // renvoyés en ordre DOM, donc le <div> externe vient AVANT le <a> cliquable.
+    // On PRIORISE le 1er élément ayant un ancêtre cliquable (le vrai bouton) ;
+    // à défaut, on retombe sur le 1er élément au bon texte.
+    let firstTextMatch: HTMLElement | null = null;
+    for (const el of candidates) {
+      const txt = (el.textContent || '').trim();
+      if (txt.length === 0 || txt.length > 40 || !labelRe.test(txt)) continue;
+      if (!firstTextMatch) firstTextMatch = el;
+      const clickable = el.closest<HTMLElement>('a, button, [role="link"], [role="button"]');
+      if (clickable) return clickable;
+    }
+    return firstTextMatch;
   }
 
   async performInitialScan() {
@@ -1594,65 +1656,14 @@ class InstagramTracker {
     this.scanOverlay.show('Initial scan in progress...');
 
     try {
-      // Aller sur le profil
-      if (!this.isOnOwnProfile()) {
-        window.location.href = `/${this.currentUsername}`;
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-
-      // Vérifier si la modal est déjà ouverte
-      let modal = document.querySelector('[role="dialog"]');
-      
+      // Ouvrir le modal followers automatiquement (helper robuste partagé).
+      this.scanOverlay.updateProgress(0, 100, 'Opening the followers modal...');
+      const modal = await this.ensureFollowersModalOpen();
       if (!modal) {
-        console.log('⏳ Modal not open, trying to open it...');
-        this.scanOverlay.updateProgress(0, 100, 'Opening the followers modal...');
-        
-        // Attendre que la page soit complètement chargée
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Chercher le lien followers
-        let followersLink: HTMLAnchorElement | null = null;
-        let attempts = 0;
-        const maxAttempts = 10;
-        
-        while (!followersLink && attempts < maxAttempts) {
-          followersLink = document.querySelector(`a[href="/${this.currentUsername}/followers/"]`) as HTMLAnchorElement;
-          
-          if (!followersLink) {
-            followersLink = document.querySelector(`a[href*="/followers/"]`) as HTMLAnchorElement;
-          }
-          
-          if (!followersLink) {
-            const links = Array.from(document.querySelectorAll('a'));
-            followersLink = links.find(link => link.href.includes('/followers/')) as HTMLAnchorElement;
-          }
-          
-          if (!followersLink) {
-            attempts++;
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
-        
-        if (!followersLink) {
-          console.error('❌ Followers link not found');
-          this.scanOverlay.showError('Please open the followers modal manually and restart the scan');
-          this.isScanning = false;
-          return;
-        }
-        
-        console.log('✅ Followers link found:', followersLink.href);
-        followersLink.click();
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        modal = document.querySelector('[role="dialog"]');
-        if (!modal) {
-          console.log('❌ Followers modal not found after click');
-          this.scanOverlay.showError('Please open the followers modal manually and restart the scan');
-          this.isScanning = false;
-          return;
-        }
-      } else {
-        console.log('✅ Followers modal already open!');
+        console.error('❌ Followers modal could not be opened');
+        this.scanOverlay.showError('Please open the followers modal manually and restart the scan');
+        this.isScanning = false;
+        return;
       }
 
       // Chercher le container scrollable (comme Playwright)
@@ -1886,108 +1897,88 @@ class InstagramTracker {
     this.scanOverlay.show('Smart scan in progress...');
 
     try {
-      // 1. Vérifier si le modal est déjà ouvert
-      let modal = document.querySelector('[role="dialog"]');
-      
-      if (modal) {
-        console.log('✅ Followers modal already open!');
-        // Attendre un peu pour que le contenu se charge
-        console.log('⏳ Waiting for modal content to load...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } else {
-        // 2. Aller sur le profil si nécessaire
-        if (!this.isOnOwnProfile()) {
-          console.log(`📍 Navigating to profile: /${this.currentUsername}`);
-          window.location.href = `/${this.currentUsername}`;
-          await new Promise(resolve => setTimeout(resolve, 3000));
-        }
-
-        // 3. Chercher le lien followers avec plusieurs stratégies
-        console.log('🔍 Searching for followers link...');
-        let followersLink: HTMLAnchorElement | null = null;
-        let attempts = 0;
-        const maxAttempts = 10;
-
-        while (!followersLink && attempts < maxAttempts) {
-          // Stratégie 1: Lien exact avec username
-          followersLink = document.querySelector(`a[href="/${this.currentUsername}/followers/"]`) as HTMLAnchorElement;
-          
-          // Stratégie 2: N'importe quel lien vers /followers/
-          if (!followersLink) {
-            followersLink = document.querySelector(`a[href*="/followers/"]`) as HTMLAnchorElement;
-          }
-          
-          // Stratégie 3: Chercher dans tous les liens
-          if (!followersLink) {
-            const links = Array.from(document.querySelectorAll('a'));
-            followersLink = links.find(link => link.href.includes('/followers/')) as HTMLAnchorElement;
-          }
-          
-          if (!followersLink) {
-            attempts++;
-            console.log(`⏳ Attempt ${attempts}/${maxAttempts} - Waiting for page to load...`);
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
-
-        if (!followersLink) {
-          this.scanOverlay.showError('Please open the followers modal manually and restart the scan');
-          throw new Error('Followers link not found after multiple attempts. Please open the followers modal manually.');
-        }
-
-        console.log('✅ Followers link found:', followersLink.href);
-        followersLink.click();
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // 4. Vérifier que le modal est maintenant ouvert
-        modal = document.querySelector('[role="dialog"]');
-        if (!modal) {
-          throw new Error('Followers modal not found after clicking link');
-        }
-
-        console.log('✅ Modal opened successfully');
+      // 1. Ouvrir le modal followers automatiquement (helper robuste partagé) :
+      //    déjà ouvert → réutilisé ; sinon navigation profil + recherche du lien
+      //    avec stratégies/retries + clic. Plus de logique dupliquée ici.
+      const modal = await this.ensureFollowersModalOpen();
+      if (!modal) {
+        this.scanOverlay.showError('Please open the followers modal manually and restart the scan');
+        throw new Error('Followers modal could not be opened automatically.');
       }
+      // Laisser le contenu du modal se charger avant de scroller.
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // 4. Créer l'extracteur de données
+      // 4. Couche sécurité : démarrer/reprendre le baseline sous budget.
+      //    La cible = compteur réel d'Instagram ; permet au budget de savoir
+      //    quand le baseline est complet et de reprendre s'il est interrompu.
+      const targetCount =
+        this.lastFollowerCount > 0
+          ? this.lastFollowerCount
+          : (await this.fetchRealFollowerCount()) || 0;
+      await startBaseline(targetCount);
+      console.log(`🎯 Baseline sous budget démarré (cible: ${targetCount || 'inconnue'})`);
+
+      // Un rate-limit intercepté (429) déclenche le backoff ; le scroller
+      // s'arrêtera à la prochaine porte budget et reprendra plus tard.
+      this.apiInterceptor.onRateLimit(() => {
+        void triggerBackoff();
+      });
+
+      // Fin de liste AUTHENTIQUE via l'API interceptée (100 % passif) : dès
+      // qu'une réponse followers indique has_next_page=false, on sait qu'on a
+      // tout — plus fiable que la détection "stuck" du scroller.
+      let apiReachedEnd = false;
+      this.apiInterceptor.onPageInfo((info) => {
+        if (info.hasNextPage === false) apiReachedEnd = true;
+      });
+
+      // 5. Créer l'extracteur de données
       const extractor = new FollowerExtractor();
 
-      // 5. Créer le scroller intelligent avec callback de progression
+      // 6. Créer le scroller intelligent (mode budget) avec callback de progression
       const scroller = new InstagramModalScroller({
+        enforceBudget: true, // budget/jour + backoff + reprise (scan-budget.ts)
+        shouldStop: () => apiReachedEnd, // fin authentique via page_info intercepté
         maxScrollAttempts: 6, // 6 tentatives avant d'arrêter (équilibre entre patience et discrétion)
         scrollDelay: 400, // 400ms entre chaque scroll (plus lent = plus sûr)
         waitForLoadTimeout: 8000, // 8 secondes pour attendre le chargement (Instagram peut être lent)
         onProgress: (progress) => {
           console.log(`📊 Progress: ${progress.totalFollowers} followers scannés`);
-          
+
           // Extraire les données au fur et à mesure du scroll
           extractor.extractAllVisible();
-          
+
           this.scanOverlay.updateProgress(
             progress.totalFollowers,
-            progress.totalFollowers + 100, // Estimation
-            `${progress.totalFollowers} followers scannés`
+            targetCount > 0 ? targetCount : progress.totalFollowers + 100,
+            `${progress.totalFollowers}${targetCount > 0 ? `/${targetCount}` : ''} followers scannés`
           );
         }
       });
 
-      // 6. Scroller jusqu'à la fin
+      // 7. Scroller jusqu'à la fin (ou jusqu'à la limite budget/backoff)
       console.log('🚀 Starting intelligent scroll to capture ALL followers...');
       const allUsernames = await scroller.scrollToEnd();
-      
-      console.log(`✅ Scroll complete: ${allUsernames.length} followers found`);
-      console.log(`� First 10 followers:`, allUsernames.slice(0, 10));
+      const stopReason = scroller.lastStopReason;
 
-      // 7. Vérifier qu'on a bien des usernames
+      console.log(`✅ Scroll stopped (${stopReason}): ${allUsernames.length} followers found`);
+
+      // 8. Vérifier qu'on a bien des usernames
       if (allUsernames.length === 0) {
         throw new Error('No followers found during scroll. Please try again.');
       }
 
-      // 8. Sauvegarder dans la base de données (utiliser directement les usernames du scroller)
+      // Le baseline est-il COMPLET ? Seuls la fin de liste ou la cible atteinte
+      // le garantissent. Une pause budget/rate-limit → baseline PARTIEL : on
+      // persiste ce qu'on a mais on NE marque PAS isInitialized (reprise plus tard).
+      const baselineComplete = stopReason === 'end-of-list' || stopReason === 'target-reached';
+
+      // 9. Sauvegarder dans la base de données (usernames cumulés, reprise incluse)
       this.followerDatabase.followers = {};
       const firstFollower = allUsernames[0];
 
-      console.log(`💾 Saving ${allUsernames.length} followers to database...`);
-      
+      console.log(`💾 Saving ${allUsernames.length} followers to database (complete=${baselineComplete})...`);
+
       allUsernames.forEach((username, index) => {
         this.followerDatabase.followers[username] = {
           username: username,
@@ -1997,23 +1988,54 @@ class InstagramTracker {
         };
       });
 
-      this.followerDatabase.totalCount = allUsernames.length;
+      this.followerDatabase.totalCount = baselineComplete
+        ? allUsernames.length
+        : (targetCount > 0 ? targetCount : allUsernames.length);
       this.followerDatabase.firstFollowerId = firstFollower;
       this.followerDatabase.lastScanDate = new Date().toISOString();
-      this.followerDatabase.isInitialized = true;
+      // Ne considérer la base « initialisée » que si le baseline est complet,
+      // sinon la reprise du lendemain repart proprement.
+      this.followerDatabase.isInitialized = baselineComplete;
 
       await this.saveFollowerDatabase();
-      console.log(`✅ Database saved: ${allUsernames.length} followers`);
+      console.log(`✅ Database saved: ${allUsernames.length} followers (complete=${baselineComplete})`);
 
-      // 9. Fermer le modal
+      // 10. Fermer le modal
       scroller.closeModal();
 
-      // 10. Afficher le succès
-      await this.updateBadge('✅');
-      this.scanOverlay.showSuccess(
-        `${allUsernames.length} followers scannés avec succès !`
-      );
-      console.log('✅ Smart scan completed successfully');
+      // 11. Afficher le résultat selon la raison d'arrêt
+      if (baselineComplete) {
+        await completeBaseline();
+        await this.updateBadge('✅');
+        this.scanOverlay.showSuccess(
+          `${allUsernames.length} followers scannés avec succès !`
+        );
+        console.log('✅ Smart scan completed successfully');
+      } else if (stopReason === 'rate-limited') {
+        await this.updateBadge('⏸️');
+        this.scanOverlay.showSuccess(
+          `${allUsernames.length} followers scannés. Instagram a temporairement limité l'accès — ` +
+          `le scan reprendra automatiquement plus tard pour protéger le compte.`
+        );
+        console.log('⏸️ Smart scan paused (rate-limited), will resume');
+      } else if (stopReason === 'stuck-incomplete') {
+        // Chargement bloqué loin de la cible (page initiale réduite sur
+        // réouverture, lazy-load stalled) — PAS une vraie fin, à retenter.
+        await this.updateBadge('⏸️');
+        this.scanOverlay.showSuccess(
+          `${allUsernames.length}${targetCount > 0 ? `/${targetCount}` : ''} followers scannés. ` +
+          `Instagram a ralenti le chargement — relance le scan pour continuer.`
+        );
+        console.log('⏸️ Smart scan paused (stuck, incomplete), retry needed');
+      } else {
+        // budget-exhausted / safety-cap
+        await this.updateBadge('⏸️');
+        this.scanOverlay.showSuccess(
+          `${allUsernames.length}${targetCount > 0 ? `/${targetCount}` : ''} followers scannés. ` +
+          `Limite quotidienne atteinte — le scan reprendra demain pour rester sûr.`
+        );
+        console.log('⏸️ Smart scan paused (daily budget), will resume tomorrow');
+      }
 
     } catch (error) {
       console.error('Error during smart scan:', error);
@@ -2117,50 +2139,14 @@ class InstagramTracker {
 
       console.log('ℹ️ API followers indisponible, repli sur la modale...');
 
-      // 1. Ouvrir la modale followers EN PLACE (sans recharger la page : un
-      //    window.location.href tuerait ce scan en cours d'exécution).
-      let modal = document.querySelector('[role="dialog"]');
-
+      // 1. Ouvrir la modale followers EN PLACE, SANS naviguer (un
+      //    window.location.href tuerait ce scan en cours). Hors du profil, le
+      //    helper renvoie null → on mémorise la collecte pour plus tard.
+      const modal = await this.ensureFollowersModalOpen({ navigate: false });
       if (!modal) {
-        // La modale ne peut être ouverte que depuis le profil (le lien
-        // /followers/ n'existe pas ailleurs). On ne navigue PAS : si on n'est
-        // pas sur le profil, on note qu'une collecte est en attente et on
-        // sortira proprement — la prochaine détection ou le passage sur le
-        // profil relancera la collecte.
-        let followersLink: HTMLAnchorElement | null = null;
-        let attempts = 0;
-        const maxAttempts = 6;
-
-        while (!followersLink && attempts < maxAttempts) {
-          followersLink = document.querySelector(`a[href="/${this.currentUsername}/followers/"]`) as HTMLAnchorElement;
-          if (!followersLink) {
-            followersLink = document.querySelector('a[href*="/followers/"]') as HTMLAnchorElement;
-          }
-          if (!followersLink) {
-            const links = Array.from(document.querySelectorAll('a'));
-            followersLink = links.find(link => link.href.includes('/followers/')) as HTMLAnchorElement;
-          }
-          if (!followersLink) {
-            attempts++;
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
-
-        if (!followersLink) {
-          // Impossible d'ouvrir la modale ici → mémoriser pour collecter plus tard.
-          console.log('⚠️ Pas sur le profil, collecte du nouveau follower reportée');
-          await accountSet({ pendingNewFollowerScan: expectedNew });
-          this.scanOverlay.hide();
-          this.isScanning = false;
-          return;
-        }
-
-        followersLink.click();
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        modal = document.querySelector('[role="dialog"]');
-      }
-
-      if (!modal) {
+        console.log('⚠️ Modale followers indisponible ici, collecte du nouveau follower reportée');
+        await accountSet({ pendingNewFollowerScan: expectedNew });
+        this.scanOverlay.hide();
         this.isScanning = false;
         return;
       }
@@ -2809,7 +2795,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const resp = (await chrome.runtime.sendMessage({ type: 'GET_PEOPLE' })) as any;
       const people = resp && resp.success && Array.isArray(resp.people) ? resp.people : [];
       const targets = people.map((p: any) => p.memberUsername).filter(Boolean);
-      tracker['proEngagementCollector'].start(ownUsername || '', targets);
+      // Mots-clés de campagne du compte actif → matchés EN LOCAL sur les commentaires.
+      const kwResp = (await chrome.runtime.sendMessage({ type: 'GET_PRO_KEYWORDS' })) as any;
+      const keywords = kwResp && kwResp.success && Array.isArray(kwResp.keywords) ? kwResp.keywords : [];
+      tracker['proEngagementCollector'].start(ownUsername || '', targets, keywords);
     })();
     sendResponse({ success: true });
   } else if (message.type === 'START_NOTIFICATION_CHECK') {
@@ -2841,6 +2830,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else if (diff < 0) {
       tracker['handleUnfollowers'](Math.abs(diff));
     }
+    sendResponse({ success: true });
+  } else if (message.type === 'STOP_ALL') {
+    // Arrêt GLOBAL : stoppe toute tâche longue en cours sur cet onglet.
+    console.log('⏹ Received STOP_ALL from popup');
+    try { tracker['proCollector'].requestStop(); } catch (e) { console.warn('STOP_ALL proCollector:', e); }
+    try { tracker['proEngagementCollector'].requestStop(); } catch (e) { console.warn('STOP_ALL engagement:', e); }
+    try { tracker['unfollowerDetector'].stopAnalysis(); } catch (e) { console.warn('STOP_ALL unfollower:', e); }
+    void chrome.runtime.sendMessage({ type: 'UPDATE_BADGE', text: '' }).catch(() => {});
     sendResponse({ success: true });
   }
   return true;

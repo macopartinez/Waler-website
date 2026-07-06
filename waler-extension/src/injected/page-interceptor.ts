@@ -50,6 +50,16 @@
     }
   }
 
+  // Signale un rate-limit (429 / throttle) sur un endpoint pertinent, pour que
+  // la couche scan-budget déclenche un backoff. On ne transmet que le minimum.
+  function postRateLimit(url: string, status: number) {
+    try {
+      window.postMessage({ source: SOURCE, type: 'RATE_LIMIT', url, status }, '*');
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   // --- Intercepter fetch ---
   const originalFetch = window.fetch;
   window.fetch = async function (...args: any[]) {
@@ -67,13 +77,17 @@
       }
 
       if (isRelevantUrl(url)) {
-        response
-          .clone()
-          .json()
-          .then((data) => postToContentScript(url, data))
-          .catch(() => {
-            /* réponse non-JSON, on ignore */
-          });
+        if (response.status === 429) {
+          postRateLimit(url, response.status);
+        } else {
+          response
+            .clone()
+            .json()
+            .then((data) => postToContentScript(url, data))
+            .catch(() => {
+              /* réponse non-JSON, on ignore */
+            });
+        }
       }
     } catch (e) {
       /* ignore */
@@ -98,6 +112,10 @@
     if (isRelevantUrl(url)) {
       xhr.addEventListener('load', function () {
         try {
+          if (xhr.status === 429) {
+            postRateLimit(url, xhr.status);
+            return;
+          }
           const contentType = xhr.getResponseHeader('content-type') || '';
           if (contentType.includes('application/json') || xhr.responseType === '' || xhr.responseType === 'text') {
             const text = xhr.responseText;

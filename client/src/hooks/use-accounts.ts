@@ -57,6 +57,41 @@ export function useDeleteAccount() {
   });
 }
 
+/**
+ * Réinitialise le compte : supprime tous les comptes liés (et leurs données) et
+ * purge les données du compte principal (login/abonnement conservés).
+ * Nécessite de resaisir le username du login en confirmation.
+ */
+export function useResetAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (confirmUsername: string) => {
+      const res = await fetch("/api/accounts/reset", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmUsername }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Failed to reset account");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      localStorage.removeItem("pro-people");
+      localStorage.removeItem("pro-connections");
+      localStorage.removeItem("pro-prospects");
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["unfollowers"] });
+      queryClient.invalidateQueries({ queryKey: ["ghost-followers"] });
+      queryClient.invalidateQueries({ queryKey: ["unfollower-stats"] });
+    },
+  });
+}
+
 /** Bascule le compte Instagram actif et rafraîchit toutes les données dépendantes. */
 export function useSwitchAccount() {
   const queryClient = useQueryClient();

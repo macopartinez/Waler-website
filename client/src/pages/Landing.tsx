@@ -2,7 +2,7 @@ import { RadarBackground } from "@/components/RadarBackground";
 import { BackgroundWaler } from "@/components/BackgroundWaler";
 import { NavBar } from "@/components/NavBar";
 import { motion, AnimatePresence } from "framer-motion";
-import { BarChart3, ShieldCheck, Zap, Eye, Search, Lock, ChevronDown, ArrowRight, Users, Heart, TrendingDown, Shield, Star, User, Crown, Target, TrendingUp, Network, MessageCircle, Activity, Clock, Link, UserPlus, Sparkles, Flame, Repeat, Check, UserMinus, SlidersHorizontal, X, Monitor } from "lucide-react";
+import { BarChart3, ShieldCheck, Zap, Eye, Search, Lock, ChevronDown, ArrowRight, Users, Heart, TrendingDown, Shield, Star, User, Crown, Target, TrendingUp, Network, MessageCircle, Activity, Clock, Link, UserPlus, Sparkles, Flame, Repeat, Check, UserMinus, SlidersHorizontal, X, Monitor, Ban, Calculator } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { AnalyticsPreview } from "@/components/AnalyticsPreview";
@@ -766,6 +766,51 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* No-AI manifesto — every analysis runs on deterministic in-house math */}
+      <section className="h-screen snap-start snap-always flex items-center justify-center relative px-6" data-testid="section-no-ai">
+        <div className="max-w-5xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="text-paper"
+          >
+            <div className="inline-flex items-center gap-2 bg-[#02c950]/10 backdrop-blur-md border border-[#02c950]/30 rounded-full px-6 py-3 mb-8 shadow-[0_0_30px_rgba(2,201,80,0.15)]">
+              <Ban className="w-5 h-5 text-[#02c950]" />
+              <span className="text-[#02c950] font-bold tracking-wider text-sm">{t.landing.noAi.badge}</span>
+            </div>
+            <h2 className="text-5xl md:text-7xl font-display font-black mb-8 text-white tracking-tighter leading-tight">
+              {t.landing.noAi.title} <span className="text-gradient">{t.landing.noAi.titleHighlight}</span>
+            </h2>
+            <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto leading-relaxed">
+              {t.landing.noAi.subtitle}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
+              {t.landing.noAi.cards.map((card, i) => ({
+                ...card,
+                Icon: [Ban, Calculator, ShieldCheck][i],
+              })).map((card, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.15, duration: 0.6 }}
+                  className="oled-card rounded-3xl p-6"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-[#02c950]/10 border border-[#02c950]/20 flex items-center justify-center mb-4">
+                    <card.Icon className="w-6 h-6 text-[#02c950]" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-2">{card.title}</h3>
+                  <p className="text-sm text-gray-400 leading-relaxed">{card.desc}</p>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       <section className="h-screen snap-start snap-always relative overflow-hidden group/features" data-testid="section-features">
                 
         {/* Nested snap container */}
@@ -1069,9 +1114,9 @@ export default function Landing() {
             </div>
             <footer className="border-t border-white/10 pt-8 mt-16">
               <div className="flex flex-col md:flex-row items-center justify-center gap-6 mb-6">
-                <a href="https://instagram.com/waler.web" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors flex items-center gap-2">
+                <a href="https://instagram.com/waler.website" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors flex items-center gap-2">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-                  @waler.web
+                  @waler.website
                 </a>
                 <a href="mailto:walerwebsite@outlook.com" className="text-gray-400 hover:text-white transition-colors flex items-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
