@@ -73,6 +73,40 @@ export function requireVerified(req: Request, res: Response, next: NextFunction)
   });
 }
 
+/**
+ * Bloque les endpoints "opérationnels" de l'extension (sync, analyse, DMs...)
+ * si l'abonnement Waler n'est pas actif. Reprend la même convention que
+ * /api/extension/validate-token et /api/extension/pro-status :
+ *   isActive = subscriptionStatus === 'active' || subscriptionStatus === 'trialing'
+ * Fail-closed : toute erreur (utilisateur introuvable, DB indisponible) bloque
+ * l'accès plutôt que de laisser passer un compte non payant.
+ */
+export function requireActiveSubscription(req: Request, res: Response, next: NextFunction) {
+  const userId = getCurrentUser(req);
+
+  if (!userId) {
+    return res.status(401).json({ message: "Non authentifié" });
+  }
+
+  getUserById(userId).then(user => {
+    if (!user) {
+      return res.status(401).json({ message: "Utilisateur non trouvé" });
+    }
+
+    const isActive = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
+    if (!isActive) {
+      return res.status(403).json({
+        message: "Abonnement inactif",
+        subscriptionInactive: true,
+      });
+    }
+
+    next();
+  }).catch(err => {
+    return res.status(500).json({ message: "Erreur serveur" });
+  });
+}
+
 export function requireOwnership(paramName: string = "userId") {
   return (req: Request, res: Response, next: NextFunction) => {
     const userId = getCurrentUser(req);

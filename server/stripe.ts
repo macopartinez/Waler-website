@@ -22,6 +22,7 @@ export async function createCheckoutSession(params: {
   successUrl: string;
   cancelUrl: string;
   customerId?: string;
+  trialPeriodDays?: number;
 }): Promise<Stripe.Checkout.Session> {
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     mode: "subscription",
@@ -40,6 +41,12 @@ export async function createCheckoutSession(params: {
     },
   };
 
+  if (params.trialPeriodDays) {
+    sessionParams.subscription_data = {
+      trial_period_days: params.trialPeriodDays,
+    };
+  }
+
   // Utiliser customer existant ou créer nouveau
   if (params.customerId) {
     sessionParams.customer = params.customerId;
@@ -50,17 +57,46 @@ export async function createCheckoutSession(params: {
   return stripe.checkout.sessions.create(sessionParams);
 }
 
+// Actions du portail que l'on peut cibler directement (deep-link) depuis /billing.
+export type PortalFlow =
+  | "payment_method_update"
+  | "subscription_cancel"
+  | "subscription_update";
+
 /**
- * Crée un portail client Stripe
+ * Crée un portail client Stripe.
+ *
+ * `flow` permet d'atterrir directement sur l'écran voulu (changer de carte,
+ * résilier, changer de formule) plutôt que sur l'accueil du portail. Les flux
+ * liés à l'abonnement (`subscription_cancel`/`subscription_update`) exigent
+ * l'ID de subscription ; sans lui on retombe sur l'accueil (factures incluses).
  */
 export async function createCustomerPortal(params: {
   customerId: string;
   returnUrl: string;
+  flow?: PortalFlow;
+  subscriptionId?: string | null;
 }): Promise<Stripe.BillingPortal.Session> {
-  return stripe.billingPortal.sessions.create({
+  const createParams: Stripe.BillingPortal.SessionCreateParams = {
     customer: params.customerId,
     return_url: params.returnUrl,
-  });
+  };
+
+  if (params.flow === "payment_method_update") {
+    createParams.flow_data = { type: "payment_method_update" };
+  } else if (params.flow === "subscription_cancel" && params.subscriptionId) {
+    createParams.flow_data = {
+      type: "subscription_cancel",
+      subscription_cancel: { subscription: params.subscriptionId },
+    };
+  } else if (params.flow === "subscription_update" && params.subscriptionId) {
+    createParams.flow_data = {
+      type: "subscription_update",
+      subscription_update: { subscription: params.subscriptionId },
+    };
+  }
+
+  return stripe.billingPortal.sessions.create(createParams);
 }
 
 /**

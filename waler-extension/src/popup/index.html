@@ -319,24 +319,71 @@
         opacity: 0;
       }
     }
+
+    /* Sélecteur de langue EN|FR (discret, coin haut-droit du header) */
+    .lang-switch {
+      position: absolute;
+      top: 0;
+      right: 0;
+      display: flex;
+      gap: 2px;
+      background: rgba(6, 6, 6, 0.82);
+      border: 1px solid rgba(2, 201, 80, 0.18);
+      border-radius: 8px;
+      padding: 2px;
+      box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .lang-btn {
+      border: none;
+      background: transparent;
+      color: hsl(240, 5%, 60%);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      padding: 3px 7px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .lang-btn:hover {
+      color: hsl(0, 0%, 90%);
+    }
+
+    .lang-btn.active {
+      background: rgba(2, 201, 80, 0.14);
+      color: #02c950;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
+      <div class="lang-switch" id="lang-switch" role="group" aria-label="Language">
+        <button class="lang-btn" data-lang="en" type="button">EN</button>
+        <button class="lang-btn" data-lang="fr" type="button">FR</button>
+      </div>
       <div class="logo">Waler</div>
-      <div class="subtitle">Instagram Analytics</div>
+      <div class="subtitle" data-i18n="header.subtitle">Instagram Analytics</div>
     </div>
 
     <div id="loading" class="loading">
       <div class="spinner"></div>
-      <div>Loading...</div>
+      <div data-i18n="common.loading">Loading...</div>
     </div>
 
     <div id="not-authenticated" class="not-authenticated" style="display: none;">
-      <h2><span data-icon="lock"></span> Not connected</h2>
-      <p>Connect to Waler to start tracking your Instagram stats</p>
-      <button class="btn btn-primary" id="login-btn">Sign in</button>
+      <h2><span data-icon="lock"></span> <span data-i18n="auth.notConnectedTitle">Not connected</span></h2>
+      <p data-i18n="auth.notConnectedBody">Connect to Waler to start tracking your Instagram stats</p>
+      <button class="btn btn-primary" id="login-btn" data-i18n="auth.signIn">Sign in</button>
+    </div>
+
+    <div id="subscription-inactive" class="not-authenticated" style="display: none;">
+      <h2><span data-icon="alert" data-icon-variant="red"></span> <span data-i18n="subscription.inactiveTitle">Subscription inactive</span></h2>
+      <p data-i18n="subscription.inactiveBody">Your Waler subscription is no longer active. Renew it to keep tracking your Instagram stats.</p>
+      <button class="btn btn-primary" id="renew-subscription-btn" data-i18n="subscription.renewButton">Renew subscription</button>
     </div>
 
     <div id="authenticated" style="display: none;">
@@ -350,7 +397,7 @@
           <span id="account-caret" style="font-size: 11px; color: hsl(240,5%,64.9%);">▼</span>
         </button>
         <div id="account-list" style="display: none; margin-top: 6px; background: rgba(4,4,4,0.96); border: 1px solid rgba(2,201,80,0.22); border-radius: 10px; overflow: hidden; box-shadow: 0 8px 32px -8px rgba(0,0,0,0.8), 0 0 40px -16px rgba(2,201,80,0.2);"></div>
-        <button id="account-link-btn" style="display: none; width: 100%; margin-top: 6px; padding: 9px; background: transparent; border: 1px dashed hsl(142, 70%, 50.4%, 0.5); border-radius: 9px; color: hsl(142, 70%, 60%); font-weight: 600; font-size: 12px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 6px;"><span data-icon="plus" data-icon-variant="green"></span> Link an Instagram account</button>
+        <button id="account-link-btn" style="display: none; width: 100%; margin-top: 6px; padding: 9px; background: transparent; border: 1px dashed hsl(142, 70%, 50.4%, 0.5); border-radius: 9px; color: hsl(142, 70%, 60%); font-weight: 600; font-size: 12px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 6px;"><span data-icon="plus" data-icon-variant="green"></span> <span data-i18n="accounts.linkAccount">Link an Instagram account</span></button>
       </div>
 
       <!-- Onglets Base / Pro -->
@@ -359,67 +406,83 @@
         <button id="tab-pro" style="flex: 1; padding: 10px; border: none; border-radius: 7px; background: transparent; color: hsl(240,5%,64.9%); font-weight: 600; font-size: 13px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 6px;"><span data-icon="sparkles" data-icon-variant="green"></span> Pro</button>
       </div>
 
+      <!-- Bouton d'ARRÊT GLOBAL : stoppe toute tâche en cours (analyse Pro de
+           conversation, analyse d'engagement, scan d'unfollowers) sur l'onglet
+           Instagram actif. Masqué par défaut, affiché pendant une tâche. -->
+      <button id="global-stop-btn" style="display:flex; width:100%; margin-bottom:16px; padding:9px; border:1px solid rgba(239,68,68,0.4); border-radius:8px; background:rgba(239,68,68,0.1); color:#ef4444; font-weight:600; font-size:12px; cursor:pointer; font-family:inherit; align-items:center; justify-content:center; gap:6px;"><span data-icon="x"></span> <span data-i18n="common.stopAll">Stop everything</span></button>
+
       <div id="base-section">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <div style="font-size: 11px; color: hsl(240, 5%, 64.9%); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;"><span data-icon="chart" data-icon-variant="green"></span> Session stats</div>
-        <button id="reset-stats-btn" style="background: none; border: none; color: hsl(240, 5%, 64.9%); cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='hsl(240, 3.7%, 15.9%)'" onmouseout="this.style.background='none'"><span data-icon="refresh"></span> Reset</button>
+        <div style="font-size: 11px; color: hsl(240, 5%, 64.9%); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;"><span data-icon="chart" data-icon-variant="green"></span> <span data-i18n="stats.sessionStats">Session stats</span></div>
+        <button id="reset-stats-btn" style="background: none; border: none; color: hsl(240, 5%, 64.9%); cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='hsl(240, 3.7%, 15.9%)'" onmouseout="this.style.background='none'"><span data-icon="refresh"></span> <span data-i18n="stats.reset">Reset</span></button>
       </div>
 
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value" id="followers-count">0</div>
-          <div class="stat-label">New followers</div>
+          <div class="stat-label" data-i18n="stats.newFollowers">New followers</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="unfollowers-count">0</div>
-          <div class="stat-label">Unfollowers</div>
+          <div class="stat-label" data-i18n="stats.unfollowers">Unfollowers</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="ghost-count">0</div>
-          <div class="stat-label">Ghost</div>
+          <div class="stat-label" data-i18n="stats.ghost">Ghost</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="pending-count">0</div>
-          <div class="stat-label">Pending</div>
+          <div class="stat-label" data-i18n="stats.pending">Pending</div>
         </div>
       </div>
+
+      <!-- Mention permanente de la limite de sécurité (budget quotidien de scan) -->
+      <div id="scan-budget-note" style="font-size: 11px; color: hsl(240, 5%, 55%); line-height: 1.5; margin: -6px 0 16px;"></div>
 
       <!-- Indicateur d'analyse en cours -->
       <div id="analysis-indicator" class="sync-status" style="display: none; border-color: hsl(142, 76%, 36%, 0.3); background: hsl(142, 76%, 36%, 0.1);">
         <div class="sync-header">
           <div class="sync-title" style="color: hsl(142, 76%, 46%);">
             <span class="radar-pulse"></span>
-            Analyzing
+            <span data-i18n="analysis.analyzing">Analyzing</span>
           </div>
           <div class="sync-badge" style="background: hsl(142, 76%, 36%, 0.15); color: hsl(142, 76%, 46%);" id="analysis-progress">0%</div>
         </div>
-        <div class="sync-info" id="analysis-status">Initializing...</div>
+        <div class="sync-info" id="analysis-status" data-i18n="analysis.initializing">Initializing...</div>
       </div>
 
       <div class="sync-status">
         <div class="sync-header">
-          <div class="sync-title">Sync</div>
-          <div class="sync-badge" id="sync-badge">Active</div>
+          <div class="sync-title" data-i18n="sync.title">Sync</div>
+          <div class="sync-badge" id="sync-badge" data-i18n="sync.active">Active</div>
         </div>
-        <div class="sync-info" id="sync-info">Last sync: Never</div>
+        <div class="sync-info" id="sync-info" data-i18n="sync.lastSyncNever">Last sync: Never</div>
       </div>
 
       <!-- Alerte unfollowers -->
       <div id="unfollower-alert" class="sync-status" style="display: none; border-color: hsl(0, 70%, 50.4%, 0.3); background: hsl(0, 70%, 50.4%, 0.1);">
         <div class="sync-header">
-          <div class="sync-title" style="color: hsl(0, 70%, 60%);"><span data-icon="alert" data-icon-variant="red"></span> Unfollowers detected</div>
+          <div class="sync-title" style="color: hsl(0, 70%, 60%);"><span data-icon="alert" data-icon-variant="red"></span> <span data-i18n="unfollowerAlert.detected">Unfollowers detected</span></div>
           <div class="sync-badge" style="background: hsl(0, 70%, 50.4%, 0.15); color: hsl(0, 70%, 60%);" id="unfollower-count-badge">0</div>
         </div>
-        <div class="sync-info">Click "Analyze unfollowers" to identify who unfollowed, blocked, or deleted their account.</div>
+        <div class="sync-info" data-i18n="unfollowerAlert.body">Click "Analyze unfollowers" to identify who unfollowed, blocked, or deleted their account.</div>
+      </div>
+
+      <!-- Scan mis en pause par la couche budget (limite quotidienne ou rate-limit Instagram) -->
+      <div id="scan-budget-alert" class="sync-status" style="display: none;">
+        <div class="sync-header">
+          <div class="sync-title" id="scan-budget-alert-title">Scan paused</div>
+        </div>
+        <div class="sync-info" id="scan-budget-alert-body"></div>
       </div>
 
       <div class="actions">
-        <button class="btn btn-primary" id="initial-scan-btn" style="display: none;"><span data-icon="search"></span> Run initial scan</button>
-        <button class="btn btn-primary" id="unfollower-analysis-btn" title="Open Instagram, then click to scan who unfollowed, blocked, or deleted their account. Keep the Instagram tab in the foreground during the analysis." style="display: none; background: hsl(0, 70%, 50.4%); border-color: hsl(0, 70%, 50.4%);"><span data-icon="search"></span> Analyze unfollowers</button>
-        <button class="btn btn-primary" id="sync-full-btn" title="Pushes your ENTIRE local follower database to the dashboard. Use this after an initial scan, or if the dashboard looks incomplete. Slower than Quick sync." style="background: hsl(142.1, 76.2%, 36.3%); border-color: hsl(142.1, 76.2%, 36.3%);"><span data-icon="upload"></span> Full sync — push all (Base → Dashboard)</button>
-        <button class="btn btn-primary" id="restore-db-btn" title="Rebuilds your local database from the dashboard, without re-scanning Instagram. Use this after reinstalling the extension or switching device." style="background: hsl(210, 76.2%, 42%); border-color: hsl(210, 76.2%, 42%);"><span data-icon="cloud"></span> Restore (Dashboard → Base)</button>
-        <button class="btn btn-primary" id="sync-btn" title="Fast sync: sends only pending changes and refreshes your follower count. Run it regularly. To re-send everything, use “Full sync” above.">Quick sync (new changes)</button>
-        <button class="btn" id="dashboard-btn" title="Opens your dashboard in a new tab.">Open dashboard</button>
+        <button class="btn btn-primary" id="initial-scan-btn" style="display: none;"><span data-icon="search"></span> <span data-i18n="actions.runInitialScan">Run initial scan</span></button>
+        <button class="btn btn-primary" id="unfollower-analysis-btn" data-i18n-title="actions.analyzeUnfollowersTitle" title="Open Instagram, then click to scan who unfollowed, blocked, or deleted their account. Keep the Instagram tab in the foreground during the analysis." style="display: none; background: hsl(0, 70%, 50.4%); border-color: hsl(0, 70%, 50.4%);"><span data-icon="search"></span> <span data-i18n="actions.analyzeUnfollowers">Analyze unfollowers</span></button>
+        <button class="btn btn-primary" id="sync-full-btn" data-i18n-title="actions.fullSyncTitle" title="Pushes your ENTIRE local follower database to the dashboard. Use this after an initial scan, or if the dashboard looks incomplete. Slower than Quick sync." style="background: hsl(142.1, 76.2%, 36.3%); border-color: hsl(142.1, 76.2%, 36.3%);"><span data-icon="upload"></span> <span data-i18n="actions.fullSync">Full sync — push all (Base → Dashboard)</span></button>
+        <button class="btn btn-primary" id="restore-db-btn" data-i18n-title="actions.restoreTitle" title="Rebuilds your local database from the dashboard, without re-scanning Instagram. Use this after reinstalling the extension or switching device." style="background: hsl(210, 76.2%, 42%); border-color: hsl(210, 76.2%, 42%);"><span data-icon="cloud"></span> <span data-i18n="actions.restore">Restore (Dashboard → Base)</span></button>
+        <button class="btn btn-primary" id="sync-btn" data-i18n="actions.quickSync" data-i18n-title="actions.quickSyncTitle" title="Fast sync: sends only pending changes and refreshes your follower count. Run it regularly. To re-send everything, use “Full sync” above.">Quick sync (new changes)</button>
+        <button class="btn" id="dashboard-btn" data-i18n="actions.openDashboard" data-i18n-title="actions.openDashboardTitle" title="Opens your dashboard in a new tab.">Open dashboard</button>
       </div>
       </div><!-- /#base-section -->
 
@@ -428,32 +491,38 @@
         <!-- Encart upsell (affiché si non-Pro) -->
         <div id="pro-upsell" style="display: none; text-align: center; padding: 30px 16px;">
           <div style="margin-bottom: 12px;"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="hsl(142, 70%, 50.4%)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/></svg></div>
-          <h2 style="font-family: 'Outfit', sans-serif; font-size: 18px; margin-bottom: 8px;">Pro feature</h2>
-          <p style="color: hsl(240,5%,64.9%); font-size: 13px; line-height: 1.6; margin-bottom: 20px;">
+          <h2 style="font-family: 'Outfit', sans-serif; font-size: 18px; margin-bottom: 8px;" data-i18n="pro.feature">Pro feature</h2>
+          <p style="color: hsl(240,5%,64.9%); font-size: 13px; line-height: 1.6; margin-bottom: 20px;" data-i18n="pro.upsellBody">
             Conversation analysis is reserved for the Pro plan. Upgrade to Pro to analyze your conversation history and track how your relationships evolve.
           </p>
-          <button class="btn btn-primary" id="upgrade-pro-btn">Upgrade to Pro</button>
+          <button class="btn btn-primary" id="upgrade-pro-btn" data-i18n="pro.upgrade">Upgrade to Pro</button>
         </div>
 
         <!-- Contenu Pro (affiché si Pro) -->
         <div id="pro-content" style="display: none;">
-          <div style="font-size: 11px; color: hsl(240, 5%, 64.9%); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;"><span data-icon="users" data-icon-variant="green"></span> Your contacts (people)</div>
+          <div style="font-size: 11px; color: hsl(240, 5%, 64.9%); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;"><span data-icon="users" data-icon-variant="green"></span> <span data-i18n="pro.yourContacts">Your contacts (people)</span></div>
 
           <!-- Compte Instagram ciblé par la section Pro (repli si l'auto-détection se trompe) -->
-          <label for="pro-account-select" style="display:block; font-size:11px; color:hsl(240,5%,64.9%); margin-bottom:6px;">Analyzed account</label>
+          <label for="pro-account-select" style="display:block; font-size:11px; color:hsl(240,5%,64.9%); margin-bottom:6px;" data-i18n="pro.analyzedAccount">Analyzed account</label>
           <select id="pro-account-select" style="width:100%; margin-bottom:12px; padding:10px 12px; font-size:13px; background:rgba(6,6,6,0.9); color:hsl(0,0%,98%); border:1px solid rgba(2,201,80,0.18); border-radius:10px; outline:none;"></select>
 
-          <button class="btn btn-primary" id="pro-engagement-btn" style="width: 100%; margin-bottom: 12px; font-size: 13px;"><span data-icon="search"></span> Analyze engagement (posts)</button>
+          <!-- Filet de sécurité : demander confirmation avant d'OUVRIR une conversation (indépendant de la détection non-lu) -->
+          <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:hsl(240,5%,64.9%); margin-bottom:12px; cursor:pointer;">
+            <input type="checkbox" id="pro-always-ask" style="width:14px; height:14px; accent-color:#02c950; cursor:pointer; flex-shrink:0;">
+            <span data-i18n="pro.alwaysAsk">Always ask before opening a conversation</span>
+          </label>
 
-          <div id="pro-people-loading" style="display:flex; align-items:center; justify-content:center; gap:8px; padding: 20px; color: hsl(240,5%,64.9%); font-size: 13px;"><span class="spinner-sm"></span> Loading…</div>
+          <button class="btn btn-primary" id="pro-engagement-btn" style="width: 100%; margin-bottom: 12px; font-size: 13px;"><span data-icon="search"></span> <span data-i18n="pro.analyzeEngagement">Analyze engagement (posts)</span></button>
+
+          <div id="pro-people-loading" style="display:flex; align-items:center; justify-content:center; gap:8px; padding: 20px; color: hsl(240,5%,64.9%); font-size: 13px;"><span class="spinner-sm"></span> <span data-i18n="common.loadingShort">Loading…</span></div>
 
           <div id="pro-people-empty" style="display:none; text-align:center; padding: 20px; color: hsl(240,5%,64.9%); font-size: 13px; line-height: 1.6;">
-            No contacts yet.<br>Add people in the dashboard (People section).
+            <span data-i18n="pro.noContactsLine1">No contacts yet.</span><br><span data-i18n="pro.noContactsLine2">Add people in the dashboard (People section).</span>
           </div>
 
           <div id="pro-people-list" style="display:none; flex-direction: column; gap: 8px;"></div>
 
-          <button class="btn" id="pro-refresh-btn" style="margin-top: 12px; font-size: 12px;"><span data-icon="refresh"></span> Refresh list</button>
+          <button class="btn" id="pro-refresh-btn" style="margin-top: 12px; font-size: 12px;"><span data-icon="refresh"></span> <span data-i18n="pro.refreshList">Refresh list</span></button>
         </div>
       </div>
     </div>

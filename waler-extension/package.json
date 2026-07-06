@@ -1,6 +1,6 @@
 {
   "name": "waler-extension",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Waler Instagram Analytics Extension",
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "node build.js",
     "package": "node package-extension.js",
     "type-check": "tsc --noEmit",
-    "test": "npx tsx test/setting-coach.test.ts"
+    "test": "npx tsx test/setting-coach.test.ts && npx tsx test/keyword-matcher.test.ts"
   },
   "dependencies": {
     "webextension-polyfill": "^0.12.0"

@@ -1,4 +1,4 @@
-import { ArrowLeft, Trash, Zap, MessageCircle, Heart, Crown, Star, Eye, Flame, CheckCircle, AlertCircle, TrendingUp, TrendingDown, Thermometer, Snowflake, Calendar, Download, Clock, Target, Users, Pencil, Ban } from "lucide-react";
+import { ArrowLeft, Trash, Zap, MessageCircle, Heart, Crown, Star, Eye, Flame, CheckCircle, AlertCircle, TrendingUp, TrendingDown, Thermometer, Snowflake, Calendar, Download, Clock, Target, Users, Pencil, Ban, Hash } from "lucide-react";
 import { useState } from "react";
 import { Person, ProspectStatus, Circle, isProspect, isInCircle, getEffectiveTemperature, getSettingPhaseLabel } from "./types";
 import { RadarBackground } from "@/components/RadarBackground";
@@ -19,7 +19,7 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
   const { t, language } = useLanguage();
   const [notes, setNotes] = useState(person.notes || '');
   const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [signalFilter, setSignalFilter] = useState<'all' | 'like' | 'comment'>('all');
+  const [signalFilter, setSignalFilter] = useState<'all' | 'like' | 'comment' | 'keyword'>('all');
 
   // Formatage d'un délai (ms) en texte court : « 12 min », « 3 h », « 2 j ».
   const formatResponseTime = (ms: number | null): string => {
@@ -63,10 +63,15 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
     all: pattern.length,
     like: pattern.filter((e) => e.liked).length,
     comment: pattern.filter((e) => e.commented).length,
+    keyword: pattern.filter((e) => e.keyword).length,
   };
 
+  // Nombre de commentaires « mot-clé » de campagne (signal d'intention). On
+  // privilégie le compteur backend, repli sur la séquence d'engagement.
+  const keywordHits = person.keywordHits ?? patternCounts.keyword;
+
   const patternFilters: Array<{
-    key: 'all' | 'like' | 'comment';
+    key: 'all' | 'like' | 'comment' | 'keyword';
     label: string;
     Icon: typeof Heart | null;
     count: number | null;
@@ -74,11 +79,15 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
     { key: 'all', label: t.personDetailView.filters.all, Icon: null, count: null },
     { key: 'like', label: t.personDetailView.filters.likes, Icon: Heart, count: patternCounts.like },
     { key: 'comment', label: t.personDetailView.filters.comments, Icon: MessageCircle, count: patternCounts.comment },
+    ...(patternCounts.keyword > 0
+      ? [{ key: 'keyword' as const, label: t.personDetailView.filters.keywords, Icon: Hash, count: patternCounts.keyword }]
+      : []),
   ];
 
   const filteredPattern = pattern.filter((e) => {
     if (signalFilter === 'like') return e.liked;
     if (signalFilter === 'comment') return e.commented;
+    if (signalFilter === 'keyword') return !!e.keyword;
     return true;
   });
 
@@ -309,6 +318,12 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
             <div className="flex items-center gap-2 px-4 py-2 rounded-full border bg-emerald-500/20 border-emerald-500/30 text-emerald-400">
               <Target className="w-4 h-4" />
               <span className="font-semibold">{interpolate(t.personDetailView.settingLabel, { phase: getSettingPhaseLabel(person.settingPhase, t.settingPhases) })}</span>
+            </div>
+          )}
+          {keywordHits > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full border bg-[#02c950]/20 border-[#02c950]/40 text-[#02c950]">
+              <Hash className="w-4 h-4" />
+              <span className="font-semibold">{t.personDetailView.keywordBadge}{keywordHits > 1 ? ` · ${keywordHits}` : ''}</span>
             </div>
           )}
           <div className="flex items-center gap-2 px-4 py-2 rounded-full border bg-purple-500/20 border-purple-500/30 text-purple-400">
@@ -639,6 +654,14 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
             <div className="text-lg font-bold text-white">{signals.length}</div>
             <div className="text-xs text-gray-500">{t.personDetailView.stats.total}</div>
           </div>
+
+          {keywordHits > 0 && (
+            <div className="bg-black/80 backdrop-blur-sm border border-[#02c950]/30 rounded-xl p-4">
+              <div className="text-xs text-gray-400 mb-1 flex items-center gap-1"><Hash className="w-3 h-3 text-[#02c950]" /> {t.personDetailView.stats.keywordHits}</div>
+              <div className="text-lg font-bold text-[#02c950]">{keywordHits}</div>
+              <div className="text-xs text-gray-500">{t.personDetailView.stats.keywordHitsHint}</div>
+            </div>
+          )}
         </div>
 
         {/* Liste des connexions en commun (comptes suivis par les deux) */}
@@ -741,8 +764,10 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                           {showRail && (
                             <div className="absolute top-0 bottom-0 w-px bg-green-500/40" />
                           )}
-                          <div className="relative z-10 mt-1 w-6 h-6 rounded-full bg-black border border-white/20 flex items-center justify-center">
-                            {entry.liked ? (
+                          <div className={`relative z-10 mt-1 w-6 h-6 rounded-full bg-black border flex items-center justify-center ${entry.keyword ? 'border-[#02c950]/60' : 'border-white/20'}`}>
+                            {entry.keyword ? (
+                              <Hash className="w-3.5 h-3.5 text-[#02c950]" />
+                            ) : entry.liked ? (
                               <Heart className="w-3.5 h-3.5 text-red-400" />
                             ) : (
                               <MessageCircle className="w-3.5 h-3.5 text-blue-400" />
@@ -757,6 +782,12 @@ export function PersonDetailView({ person, onBack, onUpdate, onRename, onDelete 
                               <MessageCircle className="w-3.5 h-3.5 text-blue-400" />
                             )}
                           </div>
+                          {entry.keyword && (
+                            <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#02c950]/10 border border-[#02c950]/30 text-[#02c950] text-xs font-semibold">
+                              <Hash className="w-3 h-3" />
+                              {interpolate(t.personDetailView.keywordTag, { keyword: entry.keyword })}
+                            </div>
+                          )}
                           <div className="text-xs text-gray-500 mt-1">{formatDate(entry.timestamp)}</div>
                           {entry.postUrl && (
                             <a

@@ -92,7 +92,19 @@ check('offre call si a déjà une activité',
   check('compliment: pas de pain', compliment.summary.revealed.pain === false);
 }
 
-// ===== 8. LIMITES CONNUES (xfail attendus) =====
+// ===== 8. Tactiques de closing (enrichies via analyse de reels de closing) =====
+check('prix demandé sans qualification → garde le cadre, ne donne pas le prix',
+  /ne donne pas le prix/i.test(coach.analyze(conv('salut ça coûte combien ton programme ?')).summary.closingTactic || ''));
+check('prix demandé sans qualification → priority reste qualify',
+  coach.analyze(conv('salut ça coûte combien ton programme ?')).summary.priority === 'qualify');
+check('objection budget → recadrage "comparé à quoi"',
+  /compar[ée] à quoi/i.test(coach.analyze(conv('c\'est trop cher pour moi')).summary.closingTactic || ''));
+check('objection autorité (conjoint) → décision plutôt que question',
+  /décision/i.test(coach.analyze(conv('faut que j\'en parle à mon copain avant de me décider')).summary.closingTactic || ''));
+check('scepticisme → script 2 étapes (raconter puis demander ce qu\'il faut voir)',
+  /raconter|PRÉCISÉMENT/.test(coach.analyze(conv('c\'est une arnaque ton truc ?')).summary.closingTactic || ''));
+
+// ===== 9. LIMITES CONNUES (xfail attendus) =====
 check('[limite] sarcasme: "ouais c\'est sûr, des résultats garantis lol" mal lu',
   coach.analyze(conv('ouais c\'est sûr, des "résultats garantis" mdr')).emotionalState !== 'hot', { xfail: true });
 check('[limite] langue sur message ultra-court ("ok")',

@@ -31,3 +31,6 @@ instagram-login.png
 context.md
 tmp/
 attached_assets/
+
+# AVG antivirus TLS-scanning root cert — local Stripe HTTPS workaround (machine-specific)
+avg-root-ca.pem

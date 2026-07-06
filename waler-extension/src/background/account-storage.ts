@@ -47,10 +47,11 @@ const PER_ACCOUNT_KEYS = new Set<string>([
   'unfollowerAnalysisProgress',
   'pendingNewFollowerScan',
   'dm_messages',
+  'scanBudget',
 ]);
 
 // Clés GLOBALES (liées au login owner, communes à tous les comptes Insta).
-//   isAuthenticated, userId, apiToken, isPro, subscriptionTier,
+//   isAuthenticated, userId, apiToken, isPro, subscriptionTier, subscriptionActive,
 //   accountRegistry, activeDsUserId, isAnalyzing, unfollowerCheckState...
 // → non préfixées, lues/écrites directement.
 

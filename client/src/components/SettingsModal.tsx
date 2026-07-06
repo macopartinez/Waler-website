@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, User, LogOut, Settings, Monitor, Database, Trash2, Crown, Loader2 } from "lucide-react";
+import { X, User, LogOut, Settings, Monitor, Database, Trash2, Crown, Loader2, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useAccounts, useDeleteAccount, type InstagramAccount } from "@/hooks/use-accounts";
+import { useAccounts, useDeleteAccount, useResetAccount, type InstagramAccount } from "@/hooks/use-accounts";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { maxAccountsForTier, maxAccountsLabel } from "@shared/accounts";
 import { fallbackAvatar } from "@/lib/utils";
@@ -193,8 +193,13 @@ function AccountsManager() {
   const { data, isLoading } = useAccounts();
   const { tier } = useSubscription();
   const deleteAccount = useDeleteAccount();
+  const resetAccount = useResetAccount();
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetInput, setResetInput] = useState("");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetBusy, setResetBusy] = useState(false);
 
   if (isLoading || !data) {
     return (
@@ -208,6 +213,8 @@ function AccountsManager() {
   const max = maxAccountsForTier(tier);
   const maxLabel = maxAccountsLabel(tier);
   const atLimit = accounts.length >= max;
+  const ownerUsername = accounts.find((a) => a.isOwner)?.username || "";
+  const linkedCount = accounts.filter((a) => !a.isOwner).length;
 
   const handleDelete = async (a: InstagramAccount) => {
     if (!confirm(interpolate(t.settingsModal.account.deleteConfirm, { username: a.username }))) return;
@@ -219,6 +226,21 @@ function AccountsManager() {
       setError(e.message || t.settingsModal.account.deleteError);
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleReset = async () => {
+    if (resetInput.trim().toLowerCase() !== ownerUsername.toLowerCase()) return;
+    setResetError(null);
+    setResetBusy(true);
+    try {
+      await resetAccount.mutateAsync(resetInput.trim());
+      setShowResetConfirm(false);
+      setResetInput("");
+    } catch (e: any) {
+      setResetError(e.message || t.settingsModal.account.resetError);
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -291,6 +313,63 @@ function AccountsManager() {
           {t.settingsModal.account.limitReached}
         </p>
       )}
+
+      <div className="mt-6 pt-4 border-t border-red-500/20">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle className="w-4 h-4 text-red-400" />
+          <h4 className="text-sm font-bold text-red-300">{t.settingsModal.account.resetHeading}</h4>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">
+          {linkedCount > 0
+            ? interpolate(t.settingsModal.account.resetDesc, { count: linkedCount })
+            : t.settingsModal.account.resetDescNoLinked}
+        </p>
+
+        {!showResetConfirm ? (
+          <button
+            onClick={() => { setShowResetConfirm(true); setResetError(null); setResetInput(""); }}
+            className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            {t.settingsModal.account.resetButton}
+          </button>
+        ) : (
+          <div className="bg-red-500/5 border border-red-500/30 rounded-xl p-4 space-y-3">
+            {resetError && (
+              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                {resetError}
+              </div>
+            )}
+            <label className="text-xs text-gray-400 block">
+              {interpolate(t.settingsModal.account.resetConfirmLabel, { username: ownerUsername })}
+            </label>
+            <input
+              type="text"
+              value={resetInput}
+              onChange={(e) => setResetInput(e.target.value)}
+              placeholder={ownerUsername}
+              className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-red-500/50"
+              disabled={resetBusy}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowResetConfirm(false); setResetInput(""); setResetError(null); }}
+                disabled={resetBusy}
+                className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {t.settingsModal.account.resetCancel}
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={resetBusy || resetInput.trim().toLowerCase() !== ownerUsername.toLowerCase()}
+                className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-red-500/20 disabled:text-red-400/50 disabled:cursor-not-allowed rounded-xl text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : t.settingsModal.account.resetConfirmButton}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

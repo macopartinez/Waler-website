@@ -21,8 +21,16 @@ export const users = pgTable("app_users", {
   verificationTokenExpiry: timestamp("verification_token_expiry"),
   verificationAttempts: integer("verification_attempts").default(0),
   subscriptionTier: text("subscription_tier"), // 'premium' or 'pro'
-  subscriptionStatus: text("subscription_status"), // 'active', 'trialing', 'cancelled', 'expired'
+  subscriptionStatus: text("subscription_status"), // 'active', 'trialing', 'past_due', 'cancelled', 'expired'
   trialEndsAt: timestamp("trial_ends_at"),
+  // Billing (Stripe). Source of truth for subscription state — the separate
+  // `subscriptions`/`plans` tables below are NOT provisioned in the live DB,
+  // so checkout/webhooks read and write these columns directly instead.
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  billingPeriod: text("billing_period"), // 'monthly' or 'yearly'
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
   // Analysis data
   followersCount: integer("followers_count"),
   followingCount: integer("following_count"),

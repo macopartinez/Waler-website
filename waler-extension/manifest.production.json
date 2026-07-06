@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Waler - Instagram Analytics",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Track your Instagram followers, unfollowers, and engagement in real-time",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqIYgkkUj5fHfpCCBy27AECOn7+2j6xcySKFmIE+kvFSQrliEjA8g5mj5tTgLFaB98O5Yob7MaEaVFRH/gW0Uolup5uaa0ou79JpDPw5zo4SlIQ6s5Wkxxmr2zaS/lMf0RRlEH3zRJRFzdNgk09rjtRQXsHnGrhqx+Ng+4bpPjb6oOpcEG5dkuu1GQAsThUycVAJbLF7N+Qatv2/yOK5xIEZlOCyoVLkjTCZPA7RBCOR4YN8397+JW03xvpELRV1ca1I+LX1MNTAmihAJYxPGbLX9gjf80vEZPOEzHePGMnT6568JggW7qxPOChofPjvByFlxmVt+r9yJjt6t5ZVVlwIDAQAB",
   "permissions": [

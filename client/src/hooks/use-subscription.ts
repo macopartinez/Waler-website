@@ -105,15 +105,27 @@ export function useCreateCheckout() {
 }
 
 /**
- * Ouvre le portail client Stripe
+ * Actions du portail Stripe que l'on peut cibler directement depuis /billing.
+ */
+export type PortalFlow =
+  | "payment_method_update"
+  | "subscription_cancel"
+  | "subscription_update";
+
+/**
+ * Ouvre le portail client Stripe. Passer un `flow` atterrit directement sur
+ * l'écran voulu (carte, résiliation, changement de formule) ; sans argument on
+ * ouvre l'accueil du portail (factures & reçus).
  */
 export function useCustomerPortal() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (flow?: PortalFlow) => {
       const res = await fetch("/api/portal", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(flow ? { flow } : {}),
         credentials: "include",
       });
 
@@ -125,9 +137,9 @@ export function useCustomerPortal() {
       return res.json() as Promise<{ url: string }>;
     },
     onSuccess: (data) => {
-      // Ouvrir le portail dans un nouvel onglet
+      // Rediriger vers le portail (le return_url ramène ensuite sur /billing).
       if (data.url) {
-        window.open(data.url, "_blank");
+        window.location.href = data.url;
       }
     },
     onError: (error: Error) => {

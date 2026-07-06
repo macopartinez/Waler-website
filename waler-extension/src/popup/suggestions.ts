@@ -1,5 +1,14 @@
 // Using Chrome API
 
+import { applyTranslations, fmt, getLanguage, t, type PopupTranslations } from './i18n.js';
+
+// Dictionnaire actif (même clé de langue persistée que le popup principal).
+let T: PopupTranslations = t('en');
+
+function pendingLabel(count: number): string {
+  return fmt(count > 1 ? T.suggestions.pendingMany : T.suggestions.pendingOne, { n: count });
+}
+
 interface Suggestion {
   id: number;
   contact_username: string;
@@ -29,14 +38,14 @@ async function loadSuggestions() {
     if (!(response as any).success || !(response as any).suggestions || (response as any).suggestions.length === 0) {
       emptyState.style.display = 'block';
       suggestionsList.style.display = 'none';
-      countText.textContent = '0 suggestion pending';
+      countText.textContent = pendingLabel(0);
       return;
     }
 
     const suggestions: Suggestion[] = (response as any).suggestions;
     const pendingCount = suggestions.filter(s => s.status === 'pending').length;
 
-    countText.textContent = `${pendingCount} suggestion${pendingCount > 1 ? 's' : ''} pending`;
+    countText.textContent = pendingLabel(pendingCount);
 
     suggestionsList.innerHTML = '';
     emptyState.style.display = 'none';
@@ -81,14 +90,14 @@ function createSuggestionCard(suggestion: Suggestion): HTMLElement {
     
     ${evidence.length > 0 ? `
       <div class="evidence">
-        Evidence:
+        ${T.suggestions.evidence}
         ${evidence.map(e => `<div class="evidence-item">• ${e}</div>`).join('')}
       </div>
     ` : ''}
     
     <div class="actions">
-      <button class="btn btn-accept" data-id="${suggestion.id}">✓ Accept</button>
-      <button class="btn btn-reject" data-id="${suggestion.id}">✗ Reject</button>
+      <button class="btn btn-accept" data-id="${suggestion.id}">${T.suggestions.accept}</button>
+      <button class="btn btn-reject" data-id="${suggestion.id}">${T.suggestions.reject}</button>
     </div>
   `;
 
@@ -121,18 +130,18 @@ async function handleAccept(suggestionId: number, card: HTMLElement) {
     } else {
       card.style.opacity = '1';
       card.style.pointerEvents = 'auto';
-      alert('Error while accepting');
+      alert(T.suggestions.errorAccepting);
     }
   } catch (error) {
     console.error('Error accepting suggestion:', error);
     card.style.opacity = '1';
     card.style.pointerEvents = 'auto';
-    alert('Erreur lors de l\'acceptation');
+    alert(T.suggestions.errorAccepting);
   }
 }
 
 async function handleReject(suggestionId: number, card: HTMLElement) {
-  const reason = prompt('Reason for rejection (optional):');
+  const reason = prompt(T.suggestions.rejectReasonPrompt);
 
   try {
     card.style.opacity = '0.5';
@@ -153,13 +162,13 @@ async function handleReject(suggestionId: number, card: HTMLElement) {
     } else {
       card.style.opacity = '1';
       card.style.pointerEvents = 'auto';
-      alert('Error while rejecting');
+      alert(T.suggestions.errorRejecting);
     }
   } catch (error) {
     console.error('Error rejecting suggestion:', error);
     card.style.opacity = '1';
     card.style.pointerEvents = 'auto';
-    alert('Erreur lors du rejet');
+    alert(T.suggestions.errorRejecting);
   }
 }
 
@@ -170,7 +179,7 @@ function updateCount() {
 
   const remainingCards = suggestionsList.querySelectorAll('.suggestion-card').length;
 
-  countText.textContent = `${remainingCards} suggestion${remainingCards > 1 ? 's' : ''} pending`;
+  countText.textContent = pendingLabel(remainingCards);
 
   if (remainingCards === 0) {
     emptyState.style.display = 'block';
@@ -202,10 +211,20 @@ document.getElementById('back-btn')?.addEventListener('click', () => {
   window.location.href = 'index.html';
 });
 
-// Charger les suggestions au démarrage
-loadSuggestions();
+// Charger la langue persistée, traduire le DOM statique, puis charger les
+// suggestions (les cartes rendues ensuite utilisent le même dictionnaire T).
+async function initSuggestionsPage() {
+  const lang = await getLanguage();
+  T = t(lang);
+  document.documentElement.lang = lang;
+  applyTranslations(T);
 
-// Rafraîchir toutes les 30 secondes
-setInterval(loadSuggestions, 30000);
+  await loadSuggestions();
+
+  // Rafraîchir toutes les 30 secondes
+  setInterval(loadSuggestions, 30000);
+}
+
+initSuggestionsPage();
 
 

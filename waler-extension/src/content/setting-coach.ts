@@ -646,8 +646,14 @@ export class SettingCoach {
       closeProbability,
       buyingSignal,
     });
+    // Qualifié = situation ET douleur révélées (ou déjà en transition) — sert de
+    // garde-fou pour ne pas céder au prix avant d'avoir vraiment qualifié.
+    const qualified = phase === 'transition' || (revealed.situation && revealed.pain);
     const closingTactic = this.closingTactic(
-      { buyingSignal, emotionalState, hasCooling, hasStalling, hasBudgetObjection, hasTrustIssue, momentum, priority },
+      {
+        buyingSignal, emotionalState, hasCooling, hasStalling, hasBudgetObjection, hasTrustIssue,
+        authorityBlocked, qualified, momentum, priority,
+      },
       lang
     );
 
@@ -878,10 +884,14 @@ export class SettingCoach {
   }
 
   /**
-   * Tactique de closing prioritaire. Reprend deux réflexes clés de la formation :
-   * (1) un prospect chaud qui temporise (« plus tard », « pas le budget », « ma
-   * carte marche pas ») fait souvent des excuses → créer de l'urgence ; (2) un
-   * prospect sceptique a besoin d'une preuve avant de pousser vers le call.
+   * Tactique de closing prioritaire. Réflexes clés (issus de la méthodo +
+   * analyse de scripts de closing réels, cf. mémoire pro-coach-engine) :
+   * (1) sceptique → le faire raconter puis lui demander CE QU'IL a besoin de
+   * voir, pas une preuve générique ; (2) prix demandé avant qualification →
+   * garder le cadre, ne pas céder le prix tout de suite ; (3) objection budget
+   * → recadrer (prix vs coût, « comparé à quoi ? ») avant de pousser l'urgence ;
+   * (4) doit en parler à un tiers → l'aider à revenir avec une décision, pas
+   * une question ; (5) chaud qui temporise → créer de l'urgence.
    */
   private closingTactic(
     signals: {
@@ -891,19 +901,40 @@ export class SettingCoach {
       hasStalling: boolean;
       hasBudgetObjection: boolean;
       hasTrustIssue: boolean;
+      authorityBlocked: boolean;
+      qualified: boolean;
       momentum: Momentum;
       priority: Priority;
     },
     lang: Lang
   ): string | null {
     const interested = signals.buyingSignal || signals.emotionalState === 'hot';
-    const stalling = signals.hasCooling || signals.hasStalling || signals.hasBudgetObjection;
+    // Budget objection sortie du bloc générique : elle a désormais son propre
+    // recadrage (ci-dessous) plutôt que de tomber direct sur l'urgence.
+    const stalling = signals.hasCooling || signals.hasStalling;
 
     // Doute / besoin de preuve passe avant tout : pousser un sceptique = le perdre.
     if (signals.emotionalState === 'skeptical' || signals.hasTrustIssue) {
       return lang === 'fr'
-        ? 'Il doute : rassure avec une preuve concrète (résultat, témoignage, garantie) avant de pousser vers le call.'
-        : 'He\'s skeptical: reassure with concrete proof (a result, a testimonial, a guarantee) before pushing for the call.';
+        ? 'Il doute : ne te justifie pas en premier. Fais-le raconter (« on dirait que tu t\'es déjà fait avoir, c\'est quoi l\'histoire ? »), puis demande-lui PRÉCISÉMENT ce qu\'il aurait besoin de voir pour être rassuré — et donne exactement ça, pas une preuve générique.'
+        : 'He\'s skeptical: don\'t justify yourself first. Get him to tell his story ("sounds like you\'ve been burned before — what happened?"), then ask him EXACTLY what he\'d need to see to feel reassured — and give him precisely that, not generic proof.';
+    }
+    // Il veut le prix / la suite avant d'avoir été qualifié : ne pas céder le
+    // cadre en donnant le prix trop tôt (cf. « cut to the chase »).
+    if (signals.buyingSignal && !signals.qualified) {
+      return lang === 'fr'
+        ? 'Il veut le prix ou la suite tout de suite, mais tu ne le connais pas encore assez : ne donne pas le prix maintenant, garde le cadre — repose une question sur sa situation ou son objectif avant d\'y revenir.'
+        : 'He wants the price or next steps right away, but you don\'t know enough about him yet: don\'t give the price now, hold the frame — ask about his situation or goal before coming back to it.';
+    }
+    if (signals.hasBudgetObjection) {
+      return lang === 'fr'
+        ? 'Objection budget : recadre avant de baisser le prix ou de pousser l\'urgence. « Le prix c\'est ce que tu payes aujourd\'hui, le coût c\'est ce que tu perds si ça reste comme ça dans 6 mois » — et demande « comparé à quoi ? » pour ancrer le prix à la valeur du résultat, pas dans l\'absolu.'
+        : 'Budget objection: reframe before discounting or pushing urgency. "The price is what you pay today, the cost is what you keep losing if this stays the same in 6 months" — and ask "compared to what?" to anchor the price to the outcome\'s value, not in the abstract.';
+    }
+    if (signals.authorityBlocked) {
+      return lang === 'fr'
+        ? 'Il doit en parler à quelqu\'un (conjoint, parents...) : ne le pousse pas à demander la permission. Aide-le à revenir vers cette personne avec une DÉCISION déjà prise plutôt qu\'une question — « tu comptes lui présenter ça comme un problème ou comme une solution ? »'
+        : 'He needs to check with someone (partner, parents...): don\'t push him to ask permission. Help him go back to them with a DECISION already made, not a question — "are you going to bring this to them as a problem or as a solution?"';
     }
     if (interested && stalling) {
       return lang === 'fr'

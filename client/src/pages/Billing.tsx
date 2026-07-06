@@ -4,10 +4,12 @@ import { motion } from 'framer-motion';
 import {
   ArrowLeft, Check, CreditCard, Calendar, Shield, Sparkles, Users,
   Crown, AlertTriangle, ExternalLink, RefreshCw, Loader2, Clock,
+  FileText, Wallet, Repeat, XCircle, RotateCcw, ChevronRight,
 } from 'lucide-react';
 import { GlassText } from '@/components/GlassText';
 import { RadarBackground } from '@/components/RadarBackground';
 import { usePlans, useUserPlan, useCreateCheckout, useCustomerPortal } from '@/hooks/use-subscription';
+import type { PortalFlow } from '@/hooks/use-subscription';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useToast } from '@/hooks/use-toast';
 import { useLanguage, interpolate } from '@/contexts/LanguageContext';
@@ -89,7 +91,7 @@ export default function Billing() {
     // paiement, factures et résiliation passent par le portail client Stripe
     // (gestion de la proratisation incluse). Sinon, on lance un nouveau checkout.
     if (hasActiveSub) {
-      portal.mutate();
+      portal.mutate('subscription_update');
       return;
     }
 
@@ -106,6 +108,14 @@ export default function Billing() {
   };
 
   const busy = checkout.isPending || portal.isPending;
+
+  // Quel bouton du portail est en cours d'ouverture (pour n'afficher le spinner
+  // que sur celui-là). `undefined` = bouton "Factures" (portail sans deep-link).
+  const pendingFlow: PortalFlow | undefined | null = portal.isPending
+    ? (portal.variables ?? undefined)
+    : null;
+
+  const isCanceling = !!subscription?.cancelAtPeriodEnd;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-body text-white relative overflow-hidden">
@@ -184,19 +194,6 @@ export default function Billing() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
-                    {hasActiveSub && (
-                      <button
-                        onClick={() => portal.mutate()}
-                        disabled={busy}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-white/10 hover:bg-white/15 text-white transition-colors disabled:opacity-50"
-                      >
-                        {portal.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                        {t.billing.managePayment}
-                        <ExternalLink className="w-3.5 h-3.5 text-gray-400" />
-                      </button>
-                    )}
-                  </div>
                 </div>
 
                 {/* Detail grid */}
@@ -259,7 +256,7 @@ export default function Billing() {
                       {interpolate(t.billing.cancellationBanner, { date: formatDate(subscription.currentPeriodEnd) })}
                     </p>
                     <button
-                      onClick={() => portal.mutate()}
+                      onClick={() => portal.mutate('subscription_update')}
                       disabled={busy}
                       className="text-sm font-semibold text-amber-300 hover:text-amber-200 underline underline-offset-2 disabled:opacity-50"
                     >
@@ -268,6 +265,72 @@ export default function Billing() {
                   </div>
                 )}
               </motion.div>
+
+              {/* Manage subscription (Stripe portal deep-links) */}
+              {hasActiveSub && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="oled-card rounded-2xl p-6 md:p-8 mb-8"
+                >
+                  <div className="mb-5">
+                    <h2 className="text-xl font-bold text-white">{t.billing.manage.title}</h2>
+                    <p className="text-gray-400 text-sm mt-1">{t.billing.manage.subtitle}</p>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <PortalAction
+                      icon={<FileText className="w-5 h-5 text-[#02c950]" />}
+                      title={t.billing.manage.invoices}
+                      description={t.billing.manage.invoicesDesc}
+                      hint={t.billing.manage.opensStripe}
+                      loading={pendingFlow === undefined && portal.isPending}
+                      disabled={busy}
+                      onClick={() => portal.mutate(undefined)}
+                    />
+                    <PortalAction
+                      icon={<Wallet className="w-5 h-5 text-[#02c950]" />}
+                      title={t.billing.manage.paymentMethod}
+                      description={t.billing.manage.paymentMethodDesc}
+                      hint={t.billing.manage.opensStripe}
+                      loading={pendingFlow === 'payment_method_update'}
+                      disabled={busy}
+                      onClick={() => portal.mutate('payment_method_update')}
+                    />
+                    <PortalAction
+                      icon={<Repeat className="w-5 h-5 text-[#02c950]" />}
+                      title={t.billing.manage.changePlan}
+                      description={t.billing.manage.changePlanDesc}
+                      hint={t.billing.manage.opensStripe}
+                      loading={pendingFlow === 'subscription_update'}
+                      disabled={busy}
+                      onClick={() => portal.mutate('subscription_update')}
+                    />
+                    {isCanceling ? (
+                      <PortalAction
+                        icon={<RotateCcw className="w-5 h-5 text-[#02c950]" />}
+                        title={t.billing.manage.resume}
+                        description={t.billing.manage.resumeDesc}
+                        hint={t.billing.manage.opensStripe}
+                        loading={pendingFlow === 'subscription_update'}
+                        disabled={busy}
+                        onClick={() => portal.mutate('subscription_update')}
+                      />
+                    ) : (
+                      <PortalAction
+                        icon={<XCircle className="w-5 h-5 text-red-400" />}
+                        title={t.billing.manage.cancel}
+                        description={t.billing.manage.cancelDesc}
+                        hint={t.billing.manage.opensStripe}
+                        danger
+                        loading={pendingFlow === 'subscription_cancel'}
+                        disabled={busy}
+                        onClick={() => portal.mutate('subscription_cancel')}
+                      />
+                    )}
+                  </div>
+                </motion.div>
+              )}
 
               {/* Switch plan section */}
               <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -402,6 +465,53 @@ export default function Billing() {
         </div>
       </div>
     </div>
+  );
+}
+
+function PortalAction({
+  icon,
+  title,
+  description,
+  hint,
+  onClick,
+  loading,
+  disabled,
+  danger,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  hint: string;
+  onClick: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`group flex items-center gap-4 text-left rounded-xl border px-4 py-3.5 transition-colors disabled:opacity-50 ${
+        danger
+          ? 'border-red-500/20 bg-red-500/[0.04] hover:bg-red-500/[0.08] hover:border-red-500/40'
+          : 'border-white/10 bg-black/30 hover:bg-white/[0.06] hover:border-[#02c950]/40'
+      }`}
+    >
+      <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center flex-shrink-0">
+        {loading ? <Loader2 className="w-5 h-5 animate-spin text-gray-300" /> : icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={`font-semibold ${danger ? 'text-red-300' : 'text-white'}`}>{title}</span>
+          <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
+            <ExternalLink className="w-2.5 h-2.5" />
+            {hint}
+          </span>
+        </div>
+        <p className="text-xs text-gray-400 mt-0.5 truncate">{description}</p>
+      </div>
+      <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-gray-300 flex-shrink-0" />
+    </button>
   );
 }
 

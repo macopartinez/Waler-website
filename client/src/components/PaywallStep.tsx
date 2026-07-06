@@ -114,7 +114,9 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
   const { offerActive } = useOfferCountdown();
 
   const planMonthly = (planId: 'premium' | 'pro') => (planId === 'premium' ? 4.99 : 19.99);
-  const planYearlyOffer = (planId: 'premium' | 'pro') => (planId === 'premium' ? 47.99 : 239.88);
+  // Prix annuel « offre » remisé (~20%), aligné sur le serveur/Stripe (plans.ts).
+  // 12× le mensuel (Pro : 239.88) = prix standard sans remise.
+  const planYearlyOffer = (planId: 'premium' | 'pro') => (planId === 'premium' ? 47.99 : 191.99);
 
   // Prix dynamiques selon le billing period
   const getPlanPrice = (planId: 'premium' | 'pro') => {
@@ -128,7 +130,9 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
     return yearlyStandardPrice(planMonthly(planId)) - planYearlyOffer(planId);
   };
 
-  const yearlyDiscount = Math.round((1 - (239.88 / (19.99 * 12))) * 100);
+  const yearlyDiscount = Math.round(
+    (1 - planYearlyOffer('pro') / yearlyStandardPrice(planMonthly('pro'))) * 100
+  );
   
   return (
     <div className="w-full max-w-6xl space-y-12">

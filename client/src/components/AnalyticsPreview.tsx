@@ -53,11 +53,7 @@ export function AnalyticsPreview() {
         key={currentSlide}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative w-[300px] h-[380px] rounded-[40px] flex flex-col items-center justify-center shadow-2xl overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, ${current.color}25, ${current.color}40)`,
-          border: `2px solid ${current.color}50`,
-        }}
+        className="oled-card relative w-[300px] h-[380px] rounded-[40px] flex flex-col items-center justify-center overflow-hidden"
       >
         {/* Cercle de progression */}
         <div className="relative mb-6">

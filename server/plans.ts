@@ -65,7 +65,7 @@ export const DEFAULT_PLANS: PlanInfo[] = [
     name: "pro",
     displayName: "Pro",
     priceMonthly: 1999, // 19.99€
-    priceYearly: 23988, // 239.88€ (19.99€/mois facturé annuellement)
+    priceYearly: 19199, // 191.99€ (économie de ~20% ; doit rester aligné sur le prix Stripe STRIPE_PRICE_PRO_YEARLY)
     maxAccounts: 3,
     maxHistoryDays: 0, // 0 = illimité
     features: [
@@ -74,12 +74,12 @@ export const DEFAULT_PLANS: PlanInfo[] = [
       "Unlimited history",
       "Personal + Professional dual mode",
       "Client & prospect CRM (VIP / Keep / Watch)",
-      "DM conversation temperature (hot / warm / cold)",
+      "DM checkpoints — temperature, momentum, priority",
       "Lead qualification phases",
       "Interaction signal timeline",
       "Contact health & priority scoring",
       "PDF progress reports & export",
-      "Waler Pro Coach badge",
+      "Waler Pro Coach: signals, not scripts — you write every message",
     ],
     stripePriceIdMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY || null,
     stripePriceIdYearly: process.env.STRIPE_PRICE_PRO_YEARLY || null,
@@ -160,6 +160,7 @@ export async function upsertSubscription(data: {
   billingPeriod?: string;
   currentPeriodEnd?: Date;
   trialEndsAt?: Date | null;
+  cancelAtPeriodEnd?: boolean;
 }): Promise<void> {
   const plan = DEFAULT_PLANS.find((p) => p.id === data.planId);
 
@@ -173,6 +174,7 @@ export async function upsertSubscription(data: {
       stripeSubscriptionId: data.stripeSubscriptionId,
       billingPeriod: data.billingPeriod,
       currentPeriodEnd: data.currentPeriodEnd,
+      cancelAtPeriodEnd: data.cancelAtPeriodEnd ?? false,
     })
     .where(eq(users.id, data.userId));
 }

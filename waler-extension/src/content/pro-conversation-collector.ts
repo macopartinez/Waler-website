@@ -62,6 +62,9 @@ const INBOX_ROW_SELECTOR =
 export class ProConversationCollector {
   private overlay: ScanOverlay;
   private running = false;
+  /** Arrêt global demandé (bouton d'arrêt du popup). Vérifié dans les boucles de
+   *  scroll (localisation inbox + thread) pour interrompre proprement. */
+  private stopRequested = false;
   private scoring = new ScoringEngine();
   private analyzer = new DMAnalyzer();
   private dynamics = new ConversationDynamicsAnalyzer();
@@ -87,6 +90,9 @@ export class ProConversationCollector {
 
   private async clearState(): Promise<void> {
     await chrome.storage.local.remove(STATE_KEY);
+    // Point terminal commun (succès / refus / erreur / non trouvé) → nettoyage
+    // du badge de progression.
+    this.clearBadge();
   }
 
   /**
@@ -95,6 +101,11 @@ export class ProConversationCollector {
    */
   async start(targetUsername: string, targetFullName = ''): Promise<void> {
     console.log(`✨ [Pro] Démarrage analyse conversation @${targetUsername} (${targetFullName || 'sans nom'})`);
+    // Nouvelle analyse → on réarme (efface un éventuel arrêt précédent).
+    this.stopRequested = false;
+    // Badge « en cours » dès le démarrage : la progression est visible même si
+    // l'utilisateur quitte l'onglet Instagram.
+    this.notifyBadge('…');
     await this.setState({
       phase: 'search',
       targetUsername,
@@ -118,6 +129,22 @@ export class ProConversationCollector {
       if (this.running) return;
       this.running = true;
       try {
+        // Fermeture du « fast path » : même thread déjà ouvert, on ne saute PAS
+        // la garde non-lu. Sur /direct/t/, la liste des conversations (sidebar
+        // gauche) reste rendue → on y localise la ligne du contact et on vérifie
+        // l'état non-lu + demande la permission AVANT d'analyser. En pratique un
+        // thread ouvert est déjà lu (pas de prompt) ; le prompt ne s'affiche que
+        // si le point bleu subsiste. Sans ça, ce chemin scrutait la conversation
+        // sans jamais demander (cf. bug fast path).
+        const sidebarRow = this.findConversationRow(targetUsername, targetFullName);
+        // Appelé même si sidebarRow est null : la garde décide (non-lu ET/OU
+        // réglage « toujours demander »). Sans ligne, isRowUnread=false mais le
+        // réglage systématique s'applique quand même.
+        const allowed = await this.checkUnreadAndAskPermission(sidebarRow, targetUsername);
+        if (!allowed) {
+          await this.clearState();
+          return;
+        }
         await this.scrollExtractAndAnalyze(targetUsername);
       } catch (error) {
         console.error('❌ [Pro] Erreur durant l\'analyse directe:', error);
@@ -230,6 +257,10 @@ export class ProConversationCollector {
     // 2. Localisation de la conversation en scrollant l'historique de l'inbox.
     this.overlay.show(`Searching for @${username} in your history…`);
     const row = await this.scrollAndLocateRow(username, fullName);
+    if (this.stopRequested) {
+      await this.clearState();
+      return;
+    }
     if (!row) {
       this.overlay.showError(`Conversation with @${username} not found`);
       await this.clearState();
@@ -273,10 +304,19 @@ export class ProConversationCollector {
 
     const scroller = new DMThreadScroller({
       knownKeys,
-      onProgress: (n) =>
-        this.overlay.updateProgress(n, n + 1, `Lecture automatique de la conversation… (${n} messages)`),
+      shouldStop: () => this.stopRequested,
+      onProgress: (n) => {
+        this.overlay.updateProgress(n, n + 1, `Lecture automatique de la conversation… (${n} messages)`);
+        this.notifyBadge(String(n)); // progression visible sur l'icône (cross-onglet)
+      },
     });
     const collected = await scroller.collect({ manual: false });
+
+    // Arrêt global pendant le scroll → on ne sauvegarde pas (évite un état partiel).
+    if (this.stopRequested) {
+      await this.clearState();
+      return;
+    }
 
     // 6-7. Fusion + dump + analyse + sauvegarde.
     await this.setState({ phase: 'analyze' });
@@ -326,6 +366,8 @@ export class ProConversationCollector {
         ? ` — ${untranscribed} voice message(s) not transcribed (too old)`
         : '';
     this.overlay.showSuccess(`Analysis complete! (${messages.length} messages)${voiceNote}`);
+    // Notif système : le résultat est visible même hors de l'onglet Instagram.
+    this.notify('Analysis complete', `@${username}: ${messages.length} messages analyzed.`);
     return messages.length;
   }
 
@@ -459,11 +501,15 @@ export class ProConversationCollector {
       this.overlay.show('Reading the conversation…');
       const scroller = new DMThreadScroller({
         knownKeys,
-        onProgress: (n) =>
-          this.overlay.updateProgress(n, n + 1, `Lecture automatique de la conversation… (${n} messages)`),
+        shouldStop: () => this.stopRequested,
+        onProgress: (n) => {
+          this.overlay.updateProgress(n, n + 1, `Lecture automatique de la conversation… (${n} messages)`);
+          this.notifyBadge(String(n));
+        },
       });
       const collected = await scroller.collect({ manual: false });
 
+      if (this.stopRequested) return; // arrêt global → pas de sauvegarde partielle
       await this.mergeDumpAndAnalyze(username, history, collected, scroller);
     } catch (error) {
       console.error('❌ [Pro] Erreur analyse autonome:', error);
@@ -669,6 +715,7 @@ export class ProConversationCollector {
     const maxStuck = 6;
 
     while (stuck < maxStuck && attempts < 200) {
+      if (this.stopRequested) return null; // arrêt global pendant la recherche inbox
       attempts++;
       const beforeTop = list.scrollTop;
       const beforeHeight = list.scrollHeight;
@@ -945,37 +992,137 @@ export class ProConversationCollector {
    * Détecte si la conversation est non lue (point bleu) et, le cas échéant,
    * demande la permission d'entrer. Renvoie true si on peut continuer.
    */
-  private async checkUnreadAndAskPermission(row: HTMLElement, username: string): Promise<boolean> {
-    const isUnread = this.isRowUnread(row);
+  private async checkUnreadAndAskPermission(row: HTMLElement | null, username: string): Promise<boolean> {
+    // La ligne localisée par findConversationRow (match par texte/nom) n'est pas
+    // toujours le vrai conteneur cliquable d'IG qui PORTE l'indicateur non-lu :
+    // on la normalise d'abord, sinon isRowUnread cherche au mauvais endroit et
+    // rate le point bleu → ouverture sans demander (bug observé).
+    const rowEl = row ? this.resolveInboxRow(row) : null;
+    const isUnread = rowEl ? this.isRowUnread(rowEl) : false;
+    const alwaysAsk = await this.getAlwaysAskBeforeOpen();
 
-    if (!isUnread) {
-      // Conversation déjà lue → pas de demande de permission.
+    // On demande la permission si la conversation est non lue OU si l'utilisateur
+    // a activé « toujours demander avant d'ouvrir » : filet INDÉPENDANT de la
+    // détection du point bleu. Si le DOM d'Instagram change et casse isRowUnread,
+    // ce réglage garantit qu'aucune conversation n'est ouverte sans accord.
+    if (!isUnread && !alwaysAsk) {
       return true;
     }
 
-    const unreadReceivedAt = this.readRowTimestamp(row);
-    await this.setState({ phase: 'await_permission', unreadDetected: true, unreadReceivedAt });
-
-    const heure = unreadReceivedAt
-      ? new Date(unreadReceivedAt).toLocaleString()
-      : 'recently';
+    const unreadReceivedAt = isUnread && rowEl ? this.readRowTimestamp(rowEl) : null;
+    await this.setState({ phase: 'await_permission', unreadDetected: isUnread, unreadReceivedAt });
 
     this.overlay.show('Waiting for your authorization…');
 
-    const allowed = await showConfirmDialog(
-      `@${username}'s message hasn't been read yet (received ${heure}).\n\n` +
-        `Opening the conversation will mark it as read. Do you authorize the analysis?`,
-      { title: 'Unread message', okLabel: 'Allow', cancelLabel: 'Decline' }
+    // Ramener l'onglet Instagram au premier plan + notif système : la demande
+    // d'autorisation est visible même si l'utilisateur a changé d'onglet/fenêtre.
+    this.requestAttention(
+      isUnread
+        ? `@${username} has an unread message — authorize opening it?`
+        : `Authorize opening the conversation with @${username}?`
     );
+
+    const heure = unreadReceivedAt ? new Date(unreadReceivedAt).toLocaleString() : 'recently';
+    const message = isUnread
+      ? `@${username}'s message hasn't been read yet (received ${heure}).\n\n` +
+          `Opening the conversation will mark it as read. Do you authorize the analysis?`
+      : `Analyzing will open and read your conversation with @${username}.\n\n` +
+          `Do you authorize opening it?`;
+    const title = isUnread ? 'Unread message' : 'Open conversation';
+
+    const allowed = await showConfirmDialog(message, {
+      title,
+      okLabel: 'Allow',
+      cancelLabel: 'Decline',
+    });
 
     if (!allowed) {
       // Noter le pattern de refus localement (sans envoi serveur).
       await this.recordRefusal({ username, refusedAt: Date.now(), unreadReceivedAt });
       this.overlay.showError('You declined opening the conversation. Process stopped');
+      this.notify('Analysis cancelled', `You declined opening @${username}'s conversation.`);
       return false;
     }
 
+    // Autorisé : repasse le badge en « en cours » (efface le ❗ d'attention).
+    this.notifyBadge('…');
     return true;
+  }
+
+  /**
+   * Lit le réglage « toujours demander avant d'ouvrir une conversation »
+   * (case à cocher du popup Pro, clé `proAlwaysAskBeforeOpen`). Filet de sécurité
+   * indépendant de la détection non-lu. Défaut : false (comportement inchangé).
+   */
+  private async getAlwaysAskBeforeOpen(): Promise<boolean> {
+    try {
+      const stored = await chrome.storage.local.get('proAlwaysAskBeforeOpen');
+      return stored.proAlwaysAskBeforeOpen === true;
+    } catch {
+      return false;
+    }
+  }
+
+  // ==================== Arrêt global ====================
+
+  /**
+   * Arrêt demandé par l'utilisateur (bouton d'arrêt global du popup). Positionne
+   * le drapeau lu par les boucles de scroll (inbox + thread) : l'analyse s'arrête
+   * proprement à la prochaine itération. Nettoie l'overlay, l'état et le badge.
+   */
+  requestStop(): void {
+    if (this.stopRequested) return;
+    this.stopRequested = true;
+    console.log('⏹ [Pro] Arrêt demandé — interruption de l\'analyse en cours.');
+    this.manualCaptureRunning = false;
+    this.overlay.showError('Analysis stopped');
+    void this.clearState();
+  }
+
+  // ==================== Feedback cross-onglet (badge + notifications) ====================
+
+  /** Met à jour le badge de l'icône — visible même quand l'utilisateur est sur
+   *  un autre onglet/fenêtre. Best-effort (jamais bloquant). */
+  private notifyBadge(text: string, color = '#0095F6'): void {
+    void chrome.runtime.sendMessage({ type: 'UPDATE_BADGE', text, color }).catch(() => {});
+  }
+
+  /** Efface le badge de l'icône. */
+  private clearBadge(): void {
+    void chrome.runtime.sendMessage({ type: 'UPDATE_BADGE', text: '' }).catch(() => {});
+  }
+
+  /** Ramène l'onglet Instagram (et sa fenêtre) au premier plan + notification
+   *  système : l'autorisation est visible même si l'utilisateur a changé d'onglet. */
+  private requestAttention(reason: string): void {
+    void chrome.runtime.sendMessage({ type: 'PRO_REQUEST_ATTENTION', reason }).catch(() => {});
+  }
+
+  /** Notification système générique (fin d'analyse…), visible hors de l'onglet. */
+  private notify(title: string, body: string): void {
+    void chrome.runtime.sendMessage({ type: 'PRO_NOTIFY', title, body }).catch(() => {});
+  }
+
+  /**
+   * Normalise un élément de ligne quelconque vers le vrai conteneur de ligne de
+   * conversation (celui qui porte l'indicateur non-lu). `findConversationRow`
+   * renvoie parfois un élément trouvé par match de texte qui n'est PAS la ligne
+   * cliquable d'IG (`INBOX_ROW_SELECTOR`) : le point bleu vit alors hors de son
+   * sous-arbre et la détection le rate. On cherche donc le conteneur réel :
+   *   1. un ancêtre qui matche INBOX_ROW_SELECTOR (`.closest`),
+   *   2. sinon l'élément lui-même s'il matche,
+   *   3. sinon un descendant qui matche (`.querySelector`),
+   * puis on élargit au `li`/`listitem` parent (le point bleu est parfois rendu
+   * en marge du bouton cliquable).
+   */
+  private resolveInboxRow(row: HTMLElement): HTMLElement {
+    const real =
+      (row.closest(INBOX_ROW_SELECTOR) as HTMLElement | null) ||
+      (row.matches(INBOX_ROW_SELECTOR) ? row : null) ||
+      (row.querySelector(INBOX_ROW_SELECTOR) as HTMLElement | null);
+    const base = real || row;
+    const wider = base.closest('li, div[role="listitem"]') as HTMLElement | null;
+    return wider && wider.contains(base) ? wider : base;
   }
 
   /** Détecte un indicateur "non lu" (point bleu / aria-label / texte en gras). */

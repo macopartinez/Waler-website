@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, Heart } from "lucide-react";
+import { ArrowRight, Heart, Check } from "lucide-react";
 import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 import type { Translations } from "@/lib/i18n/en";
 
@@ -109,13 +109,28 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
   };
 
   if (showTransition) {
+    // Synthèse déterministe : chaque ligne est indexée sur une réponse choisie.
+    // Mêmes réponses → même texte, aucun appel réseau, aucune IA. C'est ce qui
+    // referme la boucle d'introspection au lieu d'afficher directement la liste.
+    const synth = t.revealGate.synthesis;
+    const pick = <T extends Record<string, string>>(map: T, key?: string) =>
+      (key && map[key as keyof T]) || "";
+    const feelingLine = pick(synth.feeling, answers.feeling);
+    const tensionLine = pick(synth.tension, answers.recentTension);
+    const unresolvedLine = pick(synth.unresolved, answers.unresolved);
+    const contextLine = `${tensionLine} ${unresolvedLine}`.trim();
+    const instinctLine = pick(synth.instinct, answers.firstInstinct);
+    const commitmentEchoes = (answers.commitments ?? [])
+      .map((c) => pick(synth.commitmentEcho, c))
+      .filter(Boolean);
+
     return (
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         role="dialog"
         aria-modal="true"
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/90 backdrop-blur-sm py-12"
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
@@ -145,10 +160,44 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.8 }}
-            className="text-xl text-gray-400 mb-4"
+            className="text-xl text-gray-400 mb-8"
           >
             {t.revealGate.transition.subtitle}
           </motion.p>
+
+          {/* Synthèse personnalisée — reflète les réponses au lieu du texte générique */}
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.9 }}
+            className="text-left max-w-xl mx-auto mb-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6 md:p-8 space-y-4"
+          >
+            <div className="text-xs font-bold tracking-widest text-green-400/80 uppercase">
+              {synth.heading}
+            </div>
+            {feelingLine && (
+              <p className="text-xl text-white font-medium leading-snug">{feelingLine}</p>
+            )}
+            {contextLine && (
+              <p className="text-gray-300 leading-relaxed">{contextLine}</p>
+            )}
+            {instinctLine && (
+              <p className="text-gray-300 leading-relaxed">{instinctLine}</p>
+            )}
+            {commitmentEchoes.length > 0 && (
+              <div className="pt-2">
+                <div className="text-sm text-gray-400 mb-2">{synth.commitmentsLead}</div>
+                <ul className="space-y-1.5">
+                  {commitmentEchoes.map((c, i) => (
+                    <li key={i} className="flex items-start gap-2 text-white/90">
+                      <Check className="w-4 h-4 text-green-400 mt-1 flex-shrink-0" />
+                      <span>{c}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </motion.div>
 
           <motion.p
             initial={{ y: 20, opacity: 0 }}
@@ -156,7 +205,7 @@ export function RevealGate({ onReveal, onClose }: RevealGateProps) {
             transition={{ delay: 1 }}
             className="text-lg text-gray-500 mb-12 max-w-xl mx-auto"
           >
-            {t.revealGate.transition.body}
+            {synth.closing}
           </motion.p>
 
           <motion.button

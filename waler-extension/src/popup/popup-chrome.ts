@@ -4,7 +4,41 @@
 // les clés globales (= compte principal) quel que soit le compte sélectionné, et
 // affiche par ex. les « 211 unfollowers » du principal sur un compte secondaire.
 import { accountGet } from '../background/account-storage.js';
+import { DAILY_SCAN_BUDGET, getScanBudget } from '../content/scan-budget.js';
 import { WEB_BASE } from '../config.js';
+import {
+  applyTranslations,
+  fmt,
+  getLanguage,
+  setLanguage,
+  t,
+  type Language,
+  type PopupTranslations,
+} from './i18n.js';
+
+// Dictionnaire actif du popup. Initialisé en anglais puis remplacé dans init()
+// par la langue persistée (chrome.storage.local `walerLanguage`) AVANT tout
+// rendu dynamique — les handlers ne tournent qu'après init.
+let T: PopupTranslations = t('en');
+let currentLanguage: Language = 'en';
+
+/**
+ * Sélecteur EN|FR du header : marque la langue active et bascule au clic.
+ * Après persistance, on recharge le popup — c'est le moyen le plus robuste de
+ * réappliquer TOUTES les traductions (statiques + libellés dynamiques déjà
+ * rendus) sans devoir suivre chaque état de bouton.
+ */
+function setupLanguageSwitcher(): void {
+  document.querySelectorAll<HTMLButtonElement>('#lang-switch .lang-btn').forEach((btn) => {
+    const lang = (btn.getAttribute('data-lang') as Language) || 'en';
+    btn.classList.toggle('active', lang === currentLanguage);
+    btn.addEventListener('click', async () => {
+      if (lang === currentLanguage) return;
+      await setLanguage(lang);
+      location.reload();
+    });
+  });
+}
 
 // ==================== ICÔNES (line minimalistes, style lucide) ====================
 // Source de vérité unique des pictos du popup. Les éléments statiques portent
@@ -97,17 +131,29 @@ async function init() {
     const loading = document.getElementById('loading')!;
     const notAuthenticated = document.getElementById('not-authenticated')!;
     const authenticated = document.getElementById('authenticated')!;
+    const subscriptionInactive = document.getElementById('subscription-inactive')!;
+
+    // Charger la langue persistée et traduire le DOM statique AVANT d'afficher
+    // les vues (les textes dynamiques utilisent ensuite le même dictionnaire T).
+    currentLanguage = await getLanguage();
+    T = t(currentLanguage);
+    document.documentElement.lang = currentLanguage;
+    applyTranslations(T);
+    setupLanguageSwitcher();
 
     // Peindre les icônes statiques (les deux vues sont dans le DOM).
     hydrateIcons();
 
-    const stored = await chrome.storage.local.get(['isAuthenticated', 'userId', 'lastSync', 'isPro']);
+    const stored = await chrome.storage.local.get(['isAuthenticated', 'userId', 'lastSync', 'isPro', 'subscriptionActive']);
 
     loading.style.display = 'none';
 
     if (!stored.isAuthenticated) {
       notAuthenticated.style.display = 'block';
       setupLoginButton();
+    } else if (stored.subscriptionActive === false) {
+      subscriptionInactive.style.display = 'block';
+      setupRenewButton();
     } else {
       authenticated.style.display = 'block';
       await loadStats();
@@ -115,6 +161,7 @@ async function init() {
       await setupAccountSwitcher();
       setupButtons();
       setupSectionTabs();
+      setupGlobalStop();
       initProSection(stored.isPro === true);
       // Le flag stocké peut être figé/obsolète (ex. handshake fait pendant une
       // panne DB). On rafraîchit le statut Pro à la volée via le backend.
@@ -127,7 +174,7 @@ async function init() {
     // Afficher quand même quelque chose en cas d'erreur
     const loading = document.getElementById('loading');
     if (loading) {
-      loading.innerHTML = '<div style="color: #ff4444;">Loading error. Check the console.</div>';
+      loading.innerHTML = `<div style="color: #ff4444;">${T.common.loadingError}</div>`;
     }
   }
 }
@@ -156,8 +203,44 @@ async function checkInitialScanStatus() {
       unfollowerAlert.style.display = 'none';
       unfollowerAnalysisBtn.style.display = 'none';
     }
+
+    await renderScanBudgetStatus();
   } catch (error) {
     console.error('Error checking initial scan status:', error);
+  }
+}
+
+/**
+ * Affiche la limite de sécurité du scan (budget/jour) : une mention permanente
+ * discrète + une bannière si un scan est actuellement en pause pour cette
+ * raison (budget épuisé ou rate-limit Instagram). Voir scan-budget.ts.
+ */
+async function renderScanBudgetStatus() {
+  const noteEl = document.getElementById('scan-budget-note');
+  const alertEl = document.getElementById('scan-budget-alert');
+  const alertTitle = document.getElementById('scan-budget-alert-title');
+  const alertBody = document.getElementById('scan-budget-alert-body');
+  if (!noteEl || !alertEl || !alertTitle || !alertBody) return;
+
+  noteEl.textContent = fmt(T.scanBudget.safetyNote, { n: DAILY_SCAN_BUDGET });
+
+  try {
+    const state = await getScanBudget();
+    if (state.status === 'paused-budget') {
+      alertTitle.textContent = T.scanBudget.pausedTitle;
+      alertBody.textContent = fmt(T.scanBudget.pausedBody, { n: state.scannedToday });
+      alertEl.style.display = 'block';
+    } else if (state.status === 'rate-limited' && state.backoffUntil > Date.now()) {
+      const time = new Date(state.backoffUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      alertTitle.textContent = T.scanBudget.rateLimitedTitle;
+      alertBody.textContent = fmt(T.scanBudget.rateLimitedBody, { time });
+      alertEl.style.display = 'block';
+    } else {
+      alertEl.style.display = 'none';
+    }
+  } catch (error) {
+    console.error('Error reading scan budget status:', error);
+    alertEl.style.display = 'none';
   }
 }
 
@@ -196,23 +279,25 @@ async function loadStats() {
     const now = new Date();
     const diffMinutes = Math.floor((now.getTime() - lastSync.getTime()) / 60000);
     
-    let syncText = 'Last sync: ';
+    let relativeTime: string;
     if (diffMinutes < 1) {
-      syncText += 'Just now';
+      relativeTime = T.sync.justNow;
     } else if (diffMinutes < 60) {
-      syncText += `${diffMinutes} min ago`;
+      relativeTime = fmt(T.sync.minutesAgo, { n: diffMinutes });
     } else {
       const diffHours = Math.floor(diffMinutes / 60);
       if (diffHours < 24) {
-        syncText += `${diffHours}h ago`;
+        relativeTime = fmt(T.sync.hoursAgo, { n: diffHours });
       } else {
         const diffDays = Math.floor(diffHours / 24);
         const remHours = diffHours % 24;
-        syncText += remHours > 0 ? `${diffDays}d ${remHours}h ago` : `${diffDays}d ago`;
+        relativeTime = remHours > 0
+          ? fmt(T.sync.daysHoursAgo, { d: diffDays, h: remHours })
+          : fmt(T.sync.daysAgo, { n: diffDays });
       }
     }
-    
-    document.getElementById('sync-info')!.textContent = syncText;
+
+    document.getElementById('sync-info')!.textContent = fmt(T.sync.lastSync, { time: relativeTime });
   }
 }
 
@@ -231,10 +316,13 @@ async function checkAnalysisStatus() {
         const state = stored.unfollowerCheckState;
         const percentage = Math.round((state.currentIndex / state.missingFollowers.length) * 100);
         analysisProgress.textContent = `${percentage}%`;
-        analysisStatus.textContent = `Checking ${state.currentIndex}/${state.missingFollowers.length} accounts...`;
+        analysisStatus.textContent = fmt(T.analysis.checkingAccounts, {
+          current: state.currentIndex,
+          total: state.missingFollowers.length,
+        });
       } else {
         analysisProgress.textContent = '0%';
-        analysisStatus.textContent = 'Initializing...';
+        analysisStatus.textContent = T.analysis.initializing;
       }
     } else {
       // Pas d'analyse en cours
@@ -293,7 +381,7 @@ async function renderAccountSwitcher() {
 
   // Feedback de chargement pendant la récupération des comptes (évite le « @— »
   // figé qui laisse croire que rien ne se passe).
-  nameEl.innerHTML = '<span class="spinner-sm" style="width:13px;height:13px;"></span> Loading…';
+  nameEl.innerHTML = `<span class="spinner-sm" style="width:13px;height:13px;"></span> ${T.common.loadingShort}`;
   // Avatar de repli immédiat : sans ça l'<img src=""> affiche l'icône d'image
   // cassée du navigateur pendant tout le chargement.
   avatarEl.src = letteredAvatar('waler');
@@ -316,7 +404,7 @@ async function renderAccountSwitcher() {
     if (accounts.length === 0) {
       const empty = document.createElement('div');
       empty.style.cssText = 'padding: 10px 12px; font-size: 12px; color: hsl(240,5%,64.9%);';
-      empty.textContent = 'No linked accounts. Open your Instagram profile to link one.';
+      empty.textContent = T.accounts.noLinkedAccounts;
       listEl.appendChild(empty);
       return;
     }
@@ -328,7 +416,7 @@ async function renderAccountSwitcher() {
       row.innerHTML = `
         <img src="${letteredAvatar(acc.igUsername)}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;background:hsl(240,3.7%,25%);" />
         <span style="flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@${acc.igUsername}</span>
-        ${isActive ? '<span style="font-size:11px;color:hsl(142,70%,55%);">● active</span>' : ''}
+        ${isActive ? `<span style="font-size:11px;color:hsl(142,70%,55%);">${T.accounts.activeMarker}</span>` : ''}
       `;
       if (!isActive) {
         row.addEventListener('click', () => switchAccount(acc.dsUserId, row));
@@ -407,6 +495,44 @@ function setupSectionTabs() {
   });
 }
 
+/**
+ * Bouton d'ARRÊT GLOBAL : envoie STOP_ALL au content script de chaque onglet
+ * Instagram, qui stoppe toute tâche longue en cours (analyse Pro de conversation,
+ * analyse d'engagement, scan d'unfollowers). Sans effet si rien ne tourne.
+ */
+function setupGlobalStop() {
+  const btn = document.getElementById('global-stop-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const original = btn.innerHTML;
+    btn.setAttribute('disabled', 'true');
+    btn.style.opacity = '0.6';
+    try {
+      const tabs = await chrome.tabs.query({ url: '*://www.instagram.com/*' });
+      for (const tab of tabs) {
+        if (tab.id == null) continue;
+        try {
+          await chrome.tabs.sendMessage(tab.id, { type: 'STOP_ALL' });
+        } catch {
+          /* content script pas injecté sur cet onglet → on ignore */
+        }
+      }
+      // Nettoyer le badge même si aucune tâche n'a répondu.
+      void chrome.runtime.sendMessage({ type: 'UPDATE_BADGE', text: '' }).catch(() => {});
+      btn.innerHTML = lbl('check', T.common.stopDone);
+    } catch (error) {
+      console.error('Global stop error:', error);
+      btn.innerHTML = lbl('x', T.common.error);
+    } finally {
+      setTimeout(() => {
+        btn.innerHTML = original;
+        btn.removeAttribute('disabled');
+        btn.style.opacity = '1';
+      }, 1500);
+    }
+  });
+}
+
 function initProSection(isPro: boolean) {
   const upsell = document.getElementById('pro-upsell')!;
   const content = document.getElementById('pro-content')!;
@@ -420,6 +546,19 @@ function initProSection(isPro: boolean) {
 
     const engagementBtn = document.getElementById('pro-engagement-btn') as HTMLButtonElement | null;
     if (engagementBtn) engagementBtn.onclick = () => startProEngagement(engagementBtn);
+
+    // Filet de sécurité « toujours demander avant d'ouvrir une conversation » :
+    // lu par le content script (pro-conversation-collector) via la même clé de
+    // stockage. Indépendant de la détection du point bleu.
+    const alwaysAskBox = document.getElementById('pro-always-ask') as HTMLInputElement | null;
+    if (alwaysAskBox) {
+      void chrome.storage.local.get(PRO_ALWAYS_ASK_KEY).then((s) => {
+        alwaysAskBox.checked = s[PRO_ALWAYS_ASK_KEY] === true;
+      });
+      alwaysAskBox.onchange = () => {
+        void chrome.storage.local.set({ [PRO_ALWAYS_ASK_KEY]: alwaysAskBox.checked });
+      };
+    }
 
     void populateProAccountSelect();
   } else {
@@ -441,9 +580,37 @@ function initProSection(isPro: boolean) {
 async function refreshProSection() {
   try {
     const resp = (await chrome.runtime.sendMessage({ type: 'REFRESH_PRO_STATUS' })) as any;
-    if (resp && resp.success) initProSection(resp.isPro === true);
+    if (resp && resp.success) {
+      initProSection(resp.isPro === true);
+      await refreshSubscriptionGate();
+    }
   } catch {
     /* best-effort : on garde l'affichage courant */
+  }
+}
+
+/**
+ * Re-vérifie l'état d'abonnement après un REFRESH_PRO_STATUS (qui a aussi
+ * rafraîchi `subscriptionActive` côté service worker) et re-bascule
+ * l'affichage si le cache initial était périmé (ex. renouvellement pendant
+ * que le popup était déjà ouvert, ou abonnement expiré depuis le dernier
+ * handshake).
+ */
+async function refreshSubscriptionGate() {
+  const notAuthenticated = document.getElementById('not-authenticated')!;
+  if (notAuthenticated.style.display === 'block') return; // pas connecté, rien à faire ici
+
+  const { subscriptionActive } = await chrome.storage.local.get('subscriptionActive');
+  const authenticated = document.getElementById('authenticated')!;
+  const subscriptionInactive = document.getElementById('subscription-inactive')!;
+
+  if (subscriptionActive === false) {
+    authenticated.style.display = 'none';
+    subscriptionInactive.style.display = 'block';
+    setupRenewButton();
+  } else {
+    subscriptionInactive.style.display = 'none';
+    authenticated.style.display = 'block';
   }
 }
 
@@ -454,6 +621,9 @@ let peopleLoading = false;
 let proSelectedUsername: string | null = null;
 
 const PRO_ACCOUNT_KEY = 'proSelectedAccount';
+// Réglage « toujours demander avant d'ouvrir une conversation » (filet de sécurité
+// indépendant de la détection non-lu). Lu par pro-conversation-collector.ts.
+const PRO_ALWAYS_ASK_KEY = 'proAlwaysAskBeforeOpen';
 
 /**
  * Remplit le sélecteur « Compte analysé » de la section Pro à partir des comptes
@@ -485,7 +655,7 @@ async function populateProAccountSelect() {
     if (accounts.length === 0) {
       const opt = document.createElement('option');
       opt.value = '';
-      opt.textContent = 'Active account';
+      opt.textContent = T.accounts.activeAccount;
       select.appendChild(opt);
     } else {
       for (const acc of accounts) {
@@ -564,7 +734,7 @@ function renderPersonRow(person: any): HTMLElement {
   info.style.cssText = 'min-width:0; flex:1;';
   info.innerHTML = `
     <div style="font-size:13px; font-weight:600; color:hsl(0,0%,98%); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${username}</div>
-    <div style="font-size:11px; color:hsl(240,5%,64.9%); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fullName}${score !== null ? ` · score ${score}/100` : ''}</div>
+    <div style="font-size:11px; color:hsl(240,5%,64.9%); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fullName}${score !== null ? ` · ${fmt(T.pro.scoreLabel, { n: score })}` : ''}</div>
   `;
 
   // Conteneur d'actions (Analyze + éventuellement Refresh profile).
@@ -574,7 +744,7 @@ function renderPersonRow(person: any): HTMLElement {
   const btn = document.createElement('button');
   btn.className = 'btn btn-primary';
   btn.style.cssText = 'padding:8px 10px; font-size:12px; white-space:nowrap; flex-shrink:0;';
-  btn.innerHTML = lbl('search', 'Analyze');
+  btn.innerHTML = lbl('search', T.pro.analyze);
   btn.addEventListener('click', () => startProAnalysis(username, fullName, btn, !profileCollected));
   actions.appendChild(btn);
 
@@ -584,8 +754,8 @@ function renderPersonRow(person: any): HTMLElement {
   if (profileCollected) {
     const refreshBtn = document.createElement('button');
     refreshBtn.className = 'btn';
-    refreshBtn.title = 'Refresh profile';
-    refreshBtn.setAttribute('aria-label', 'Refresh profile');
+    refreshBtn.title = T.pro.refreshProfile;
+    refreshBtn.setAttribute('aria-label', T.pro.refreshProfile);
     refreshBtn.style.cssText = 'padding:8px; font-size:12px; flex-shrink:0;';
     refreshBtn.innerHTML = ic('refresh');
     refreshBtn.addEventListener('click', () => refreshPersonProfile(username, refreshBtn));
@@ -629,7 +799,7 @@ async function startProAnalysis(username: string, fullName: string, btn: HTMLBut
     // Nouveau People : préparer le profil (1 appel API) AVANT la conversation.
     // Best-effort — un échec de collecte ne bloque pas l'analyse de conversation.
     if (collectProfileFirst) {
-      btn.innerHTML = loadingLbl('Profile…');
+      btn.innerHTML = loadingLbl(T.buttonStates.profileLoading);
       try {
         await chrome.runtime.sendMessage({ type: 'COLLECT_PERSON_PROFILE', username });
       } catch (e) {
@@ -640,7 +810,7 @@ async function startProAnalysis(username: string, fullName: string, btn: HTMLBut
 
     const instagramTabs = await chrome.tabs.query({ url: '*://www.instagram.com/*' });
     if (instagramTabs.length === 0 || !instagramTabs[0]?.id) {
-      btn.innerHTML = lbl('x', 'Open Instagram');
+      btn.innerHTML = lbl('x', T.buttonStates.openInstagram);
       setTimeout(() => { btn.innerHTML = originalHtml; btn.removeAttribute('disabled'); btn.style.opacity = '1'; }, 3000);
       return;
     }
@@ -652,7 +822,7 @@ async function startProAnalysis(username: string, fullName: string, btn: HTMLBut
       fullName,
     });
 
-    btn.innerHTML = lbl('check', 'Started!');
+    btn.innerHTML = lbl('check', T.buttonStates.started);
     // Décrémenter EN ATTENTE : cette personne est maintenant en cours de classement
     void chrome.runtime.sendMessage({ type: 'PERSON_CLASSIFIED' });
     // Donner le focus à l'onglet Instagram pour suivre l'analyse
@@ -660,7 +830,7 @@ async function startProAnalysis(username: string, fullName: string, btn: HTMLBut
     setTimeout(() => { window.close(); }, 800);
   } catch (error) {
     console.error('Error starting pro analysis:', error);
-    btn.innerHTML = lbl('x', 'Error');
+    btn.innerHTML = lbl('x', T.common.error);
     setTimeout(() => { btn.innerHTML = originalHtml; btn.removeAttribute('disabled'); btn.style.opacity = '1'; }, 3000);
   }
 }
@@ -672,12 +842,12 @@ async function startProEngagement(btn: HTMLButtonElement) {
   const originalHtml = btn.innerHTML;
   btn.setAttribute('disabled', 'true');
   btn.style.opacity = '0.6';
-  btn.innerHTML = loadingLbl('Analyzing...');
+  btn.innerHTML = loadingLbl(T.buttonStates.analyzing);
 
   try {
     const instagramTabs = await chrome.tabs.query({ url: '*://www.instagram.com/*' });
     if (instagramTabs.length === 0 || !instagramTabs[0]?.id) {
-      btn.innerHTML = lbl('x', 'Open Instagram');
+      btn.innerHTML = lbl('x', T.buttonStates.openInstagram);
       setTimeout(() => { btn.innerHTML = originalHtml; btn.removeAttribute('disabled'); btn.style.opacity = '1'; }, 3000);
       return;
     }
@@ -685,12 +855,12 @@ async function startProEngagement(btn: HTMLButtonElement) {
     await ensureContentScript(instagramTabs[0].id);
     await chrome.tabs.sendMessage(instagramTabs[0].id, { type: 'START_PRO_ENGAGEMENT_ANALYSIS' });
 
-    btn.innerHTML = lbl('check', 'Started!');
+    btn.innerHTML = lbl('check', T.buttonStates.started);
     await chrome.tabs.update(instagramTabs[0].id, { active: true });
     setTimeout(() => { window.close(); }, 800);
   } catch (error) {
     console.error('Error starting pro engagement:', error);
-    btn.innerHTML = lbl('x', 'Error');
+    btn.innerHTML = lbl('x', T.common.error);
     setTimeout(() => { btn.innerHTML = originalHtml; btn.removeAttribute('disabled'); btn.style.opacity = '1'; }, 3000);
   }
 }
@@ -702,6 +872,15 @@ function setupLoginButton() {
       url: `${WEB_BASE}/extension-auth`,
     });
   });
+}
+
+function setupRenewButton() {
+  const renewBtn = document.getElementById('renew-subscription-btn')!;
+  renewBtn.onclick = () => {
+    chrome.tabs.create({
+      url: `${WEB_BASE}/billing`,
+    });
+  };
 }
 
 function setupButtons() {
@@ -718,7 +897,7 @@ function setupButtons() {
 
   // Bouton réinitialiser les stats
   resetStatsBtn.addEventListener('click', async () => {
-    if (confirm('Are you sure you want to reset the session statistics?')) {
+    if (confirm(T.stats.resetConfirm)) {
       try {
         await chrome.runtime.sendMessage({ type: 'RESET_STATS' });
         await loadStats();
@@ -738,7 +917,7 @@ function setupButtons() {
 
     isFullSyncing = true;
     const originalHtml = syncFullBtn.innerHTML;
-    syncFullBtn.innerHTML = loadingLbl('Syncing...');
+    syncFullBtn.innerHTML = loadingLbl(T.buttonStates.syncing);
     syncFullBtn.setAttribute('disabled', 'true');
     syncFullBtn.style.opacity = '0.6';
 
@@ -746,7 +925,7 @@ function setupButtons() {
       const response = await chrome.runtime.sendMessage({ type: 'SYNC_FULL_DATABASE' });
 
       if (response.success) {
-        syncFullBtn.innerHTML = lbl('check', `${response.synced} followers synced!`);
+        syncFullBtn.innerHTML = lbl('check', fmt(T.buttonStates.followersSynced, { n: response.synced }));
         console.log('✅ Full sync successful:', response);
 
         setTimeout(() => {
@@ -756,7 +935,7 @@ function setupButtons() {
           isFullSyncing = false;
         }, 3000);
       } else {
-        syncFullBtn.innerHTML = lbl('x', 'Sync error');
+        syncFullBtn.innerHTML = lbl('x', T.buttonStates.syncError);
         console.error('❌ Full sync failed:', response.error);
 
         setTimeout(() => {
@@ -768,7 +947,7 @@ function setupButtons() {
       }
     } catch (error) {
       console.error('Error during full sync:', error);
-      syncFullBtn.innerHTML = lbl('x', 'Error');
+      syncFullBtn.innerHTML = lbl('x', T.common.error);
 
       setTimeout(() => {
         syncFullBtn.innerHTML = originalHtml;
@@ -784,7 +963,7 @@ function setupButtons() {
   // sans re-scanner Instagram.
   restoreDbBtn.addEventListener('click', async () => {
     const originalHtml = restoreDbBtn.innerHTML;
-    restoreDbBtn.innerHTML = loadingLbl('Restoring...');
+    restoreDbBtn.innerHTML = loadingLbl(T.buttonStates.restoring);
     restoreDbBtn.setAttribute('disabled', 'true');
     restoreDbBtn.style.opacity = '0.6';
 
@@ -801,7 +980,7 @@ function setupButtons() {
       // tryRestoreFromBackend vit dans le content script → cibler un onglet Instagram.
       const instagramTabs = await chrome.tabs.query({ url: '*://www.instagram.com/*' });
       if (instagramTabs.length === 0 || !instagramTabs[0]?.id) {
-        reset(lbl('x', 'Open Instagram first'));
+        reset(lbl('x', T.buttonStates.openInstagramFirst));
         return;
       }
 
@@ -812,19 +991,19 @@ function setupButtons() {
 
       if (response?.success) {
         await loadStats();
-        reset(lbl('check', `${response.count ?? 0} followers restored!`));
+        reset(lbl('check', fmt(T.buttonStates.followersRestored, { n: response.count ?? 0 })));
       } else {
-        reset(lbl('info', 'No data to restore'));
+        reset(lbl('info', T.buttonStates.noDataToRestore));
       }
     } catch (error) {
       console.error('Error restoring database:', error);
-      reset(lbl('x', 'Error'));
+      reset(lbl('x', T.common.error));
     }
   });
 
   // Bouton scan initial
   initialScanBtn.addEventListener('click', async () => {
-    initialScanBtn.innerHTML = loadingLbl('Scanning...');
+    initialScanBtn.innerHTML = loadingLbl(T.buttonStates.scanning);
     initialScanBtn.setAttribute('disabled', 'true');
     initialScanBtn.style.opacity = '0.6';
 
@@ -833,7 +1012,7 @@ function setupButtons() {
       const instagramTabs = await chrome.tabs.query({ url: '*://www.instagram.com/*' });
 
       if (instagramTabs.length === 0 || !instagramTabs[0]?.id) {
-        initialScanBtn.innerHTML = lbl('x', 'Open Instagram first');
+        initialScanBtn.innerHTML = lbl('x', T.buttonStates.openInstagramFirst);
         initialScanBtn.removeAttribute('disabled');
         initialScanBtn.style.opacity = '1';
         return;
@@ -841,14 +1020,14 @@ function setupButtons() {
 
       await ensureContentScript(instagramTabs[0].id);
       await chrome.tabs.sendMessage(instagramTabs[0].id, { type: 'START_INITIAL_SCAN' });
-      initialScanBtn.innerHTML = lbl('check', 'Scan started!');
+      initialScanBtn.innerHTML = lbl('check', T.buttonStates.scanStarted);
 
       setTimeout(() => {
         initialScanBtn.style.display = 'none';
       }, 2000);
     } catch (error) {
       console.error('Error starting initial scan:', error);
-      initialScanBtn.innerHTML = lbl('x', 'Error - Open Instagram');
+      initialScanBtn.innerHTML = lbl('x', T.buttonStates.errorOpenInstagram);
       initialScanBtn.removeAttribute('disabled');
       initialScanBtn.style.opacity = '1';
     }
@@ -862,18 +1041,18 @@ function setupButtons() {
     }
 
     isAnalyzing = true;
-    unfollowerAnalysisBtn.innerHTML = loadingLbl('Analyzing...');
+    unfollowerAnalysisBtn.innerHTML = loadingLbl(T.buttonStates.analyzing);
     unfollowerAnalysisBtn.setAttribute('disabled', 'true');
     unfollowerAnalysisBtn.style.opacity = '0.6';
 
     try {
-      // Vérifier que l'utilisateur est sur Instagram
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const currentTab = tabs[0];
+      // Chercher n'importe quel onglet Instagram (pas seulement l'onglet actif) —
+      // même pattern que les autres boutons, pour ne pas obliger l'utilisateur à
+      // avoir Instagram au premier plan avant de lancer l'analyse.
+      const instagramTabs = await chrome.tabs.query({ url: '*://www.instagram.com/*' });
 
-      if (!currentTab?.url?.includes('instagram.com')) {
-        alert('Please open Instagram in the active tab to start the analysis.');
-        unfollowerAnalysisBtn.innerHTML = lbl('search', 'Analyze unfollowers');
+      if (instagramTabs.length === 0 || !instagramTabs[0]?.id) {
+        unfollowerAnalysisBtn.innerHTML = lbl('x', T.buttonStates.openInstagramFirst);
         unfollowerAnalysisBtn.removeAttribute('disabled');
         unfollowerAnalysisBtn.style.opacity = '1';
         isAnalyzing = false;
@@ -881,12 +1060,10 @@ function setupButtons() {
       }
 
       // Envoyer un message au content script pour lancer l'analyse
-      if (currentTab.id) {
-        await ensureContentScript(currentTab.id);
-        await chrome.tabs.sendMessage(currentTab.id, { type: 'START_UNFOLLOWER_ANALYSIS' });
-      }
+      await ensureContentScript(instagramTabs[0].id);
+      await chrome.tabs.sendMessage(instagramTabs[0].id, { type: 'START_UNFOLLOWER_ANALYSIS' });
 
-      unfollowerAnalysisBtn.innerHTML = lbl('check', 'Analysis started!');
+      unfollowerAnalysisBtn.innerHTML = lbl('check', T.buttonStates.analysisStarted);
 
       setTimeout(() => {
         unfollowerAnalysisBtn.style.display = 'none';
@@ -895,7 +1072,7 @@ function setupButtons() {
       }, 2000);
     } catch (error) {
       console.error('Error starting unfollower analysis:', error);
-      unfollowerAnalysisBtn.innerHTML = lbl('x', 'Error');
+      unfollowerAnalysisBtn.innerHTML = lbl('x', T.common.error);
       unfollowerAnalysisBtn.removeAttribute('disabled');
       unfollowerAnalysisBtn.style.opacity = '1';
       isAnalyzing = false;
@@ -910,24 +1087,24 @@ function setupButtons() {
     }
 
     isSyncing = true;
-    syncBtn.innerHTML = loadingLbl('Syncing...');
+    syncBtn.innerHTML = loadingLbl(T.buttonStates.syncing);
     syncBtn.setAttribute('disabled', 'true');
     syncBtn.style.opacity = '0.6';
     syncBtn.style.cursor = 'not-allowed';
 
     try {
       // 1. Vérifier les notifications pour détecter les unfollowers cachés
-      syncBtn.innerHTML = loadingLbl('Checking notifications...');
+      syncBtn.innerHTML = loadingLbl(T.buttonStates.checkingNotifications);
       await chrome.runtime.sendMessage({ type: 'CHECK_NOTIFICATIONS' });
 
       // 2. Synchroniser normalement
-      syncBtn.innerHTML = loadingLbl('Syncing...');
+      syncBtn.innerHTML = loadingLbl(T.buttonStates.syncing);
       await chrome.runtime.sendMessage({ type: 'SYNC_NOW' });
       await loadStats();
-      syncBtn.innerHTML = lbl('check', 'Synced');
+      syncBtn.innerHTML = lbl('check', T.buttonStates.synced);
 
       setTimeout(() => {
-        syncBtn.textContent = 'Quick sync (new changes)';
+        syncBtn.textContent = T.actions.quickSync;
         syncBtn.removeAttribute('disabled');
         syncBtn.style.opacity = '1';
         syncBtn.style.cursor = 'pointer';
@@ -935,10 +1112,10 @@ function setupButtons() {
       }, 3000);
     } catch (error) {
       console.error('Sync error:', error);
-      syncBtn.innerHTML = lbl('x', 'Error');
+      syncBtn.innerHTML = lbl('x', T.common.error);
 
       setTimeout(() => {
-        syncBtn.textContent = 'Quick sync (new changes)';
+        syncBtn.textContent = T.actions.quickSync;
         syncBtn.removeAttribute('disabled');
         syncBtn.style.opacity = '1';
         syncBtn.style.cursor = 'pointer';

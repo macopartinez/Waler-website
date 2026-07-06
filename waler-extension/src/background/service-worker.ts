@@ -54,6 +54,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'sync-data') {
     console.log('⏰ Syncing data...');
+    await refreshProStatus();
     await syncManager.syncToServer();
   }
 });
@@ -80,6 +81,7 @@ chrome.runtime.onMessageExternal.addListener((message: any, sender: any, sendRes
             userId: message.userId,
             apiToken: message.token,
             lastSync: Date.now(),
+            subscriptionActive: data.subscriptionActive === true,
           });
         } else {
           throw new Error('Token validation failed');
@@ -369,6 +371,38 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: a
         }
         break;
 
+      case 'GET_PRO_KEYWORDS':
+        // Mots-clés de campagne du compte actif (mécanique « commente GUIDE »).
+        // Même résolution de compte que GET_PEOPLE. Renvoie une liste de chaînes.
+        try {
+          const activeStoreK = await chrome.storage.local.get('activeDsUserId');
+          const regK = await accountGet('accountRegistry');
+          const activeEntryK = regK.accountRegistry?.accounts?.[activeStoreK.activeDsUserId];
+          const activeAccIdK = activeEntryK?.accountId;
+          const activeUserK = message.username || activeEntryK?.igUsername;
+          const kwParams = new URLSearchParams();
+          if (activeUserK) kwParams.set('username', activeUserK);
+          if (activeAccIdK) kwParams.set('accountId', String(activeAccIdK));
+          const kwQs = kwParams.toString();
+          const kwResp = await fetch(`${API_BASE}/api/extension/pro-keywords${kwQs ? `?${kwQs}` : ''}`, {
+            method: 'GET',
+            credentials: 'include',
+          });
+          if (!kwResp.ok) {
+            console.warn('⚠️ GET_PRO_KEYWORDS: HTTP', kwResp.status);
+            sendResponse({ success: false, error: `HTTP ${kwResp.status}`, keywords: [] });
+            break;
+          }
+          const kwData = await kwResp.json();
+          const keywords = (kwData.keywords || []).map((k: any) => k.keyword).filter(Boolean);
+          console.log(`🔎 GET_PRO_KEYWORDS résultat → ${keywords.length} mot(s)-clé(s)`, keywords);
+          sendResponse({ success: true, keywords });
+        } catch (error: any) {
+          console.error('Error fetching pro keywords:', error);
+          sendResponse({ success: false, error: error.message, keywords: [] });
+        }
+        break;
+
       case 'RESTORE_FOLLOWERS':
         // Récupère les followers du compte actif depuis le backend (Postgres) pour
         // reconstruire la base locale sans re-scanner Instagram. credentials:'include'
@@ -582,6 +616,11 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: a
               analyzedPosts: message.analyzedPosts || [],
               engagers: message.engagers || [],
               mutuals: message.mutuals || [],
+              // Posts à liste de likers/commentaires tronquée (plafond IG) : une
+              // People non vue sur ces posts est incertaine, pas un "n'a pas
+              // interagi" fiable.
+              partialLikePosts: message.partialLikePosts || [],
+              partialCommentPosts: message.partialCommentPosts || [],
               ownUsername: message.ownUsername || '',
             }),
           });
@@ -766,6 +805,52 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: a
         chrome.action.setBadgeText({ text: message.text });
         chrome.action.setBadgeBackgroundColor({ color: message.color || '#00FF00' });
         sendResponse({ success: true });
+        break;
+
+      case 'PRO_REQUEST_ATTENTION':
+        // L'analyse Pro attend une autorisation, mais l'onglet Instagram n'est
+        // peut-être pas au premier plan (l'utilisateur a changé d'onglet/fenêtre).
+        // On ramène l'onglet ET sa fenêtre au premier plan, on flashe le badge et
+        // on émet une notification système (visible même hors du navigateur).
+        try {
+          const attTab = sender?.tab;
+          if (attTab?.id != null) {
+            await chrome.tabs.update(attTab.id, { active: true });
+            if (attTab.windowId != null) {
+              await chrome.windows.update(attTab.windowId, { focused: true, drawAttention: true });
+            }
+          }
+          chrome.action.setBadgeText({ text: '❗' });
+          chrome.action.setBadgeBackgroundColor({ color: '#FF6B00' });
+          chrome.notifications.create('waler-pro-permission', {
+            type: 'basic',
+            iconUrl: 'icon.png',
+            title: 'Authorization needed',
+            message: message.reason || 'Waler needs your authorization to open a conversation.',
+            priority: 2,
+          });
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('PRO_REQUEST_ATTENTION error:', error);
+          sendResponse({ success: false, error: String(error) });
+        }
+        break;
+
+      case 'PRO_NOTIFY':
+        // Notification système générique pour l'analyse Pro (fin/refus/erreur),
+        // visible même si l'utilisateur n'est pas sur l'onglet Instagram.
+        try {
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icon.png',
+            title: message.title || 'Waler',
+            message: message.body || '',
+            priority: 1,
+          });
+          sendResponse({ success: true });
+        } catch (error) {
+          sendResponse({ success: false, error: String(error) });
+        }
         break;
 
       case 'CHECK_NOTIFICATIONS':
@@ -1397,7 +1482,11 @@ async function refreshProStatus(): Promise<boolean> {
     }
     const data = await response.json();
     const isPro = data.isPro === true;
-    await chrome.storage.local.set({ isPro, subscriptionTier: data.subscriptionTier ?? null });
+    await chrome.storage.local.set({
+      isPro,
+      subscriptionTier: data.subscriptionTier ?? null,
+      subscriptionActive: data.subscriptionActive === true,
+    });
     console.log(`✅ Statut Pro rafraîchi: isPro=${isPro} (tier: ${data.subscriptionTier ?? 'n/a'})`);
     return isPro;
   } catch (error) {

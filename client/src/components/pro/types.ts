@@ -87,6 +87,7 @@ export type Signal = {
   timestamp: Date;
   description: string;
   postUrl?: string; // lien du post pour les signaux like/comment (sinon absent)
+  keyword?: string; // mot-clé de campagne détecté dans un commentaire (sinon absent)
 };
 
 export interface Person {
@@ -122,6 +123,8 @@ export interface Person {
   isPrivate?: boolean;
   lastAnalyzedAt?: Date;
   engagementPattern?: EngagementEntry[];
+  // Nombre de commentaires « mot-clé » de campagne (signal d'intention fort).
+  keywordHits?: number;
   // Axe température (auto, depuis l'analyse des conversations DM).
   temperature?: Temperature;
   dynamics?: ConversationDynamics;
@@ -196,6 +199,8 @@ export type EngagementEntry = {
   postUrl: string;
   liked: boolean;
   commented: boolean;
+  // Mot-clé de campagne détecté dans le commentaire de ce post (sinon absent).
+  keyword?: string;
   timestamp?: Date;
   gapBefore: number;
 };

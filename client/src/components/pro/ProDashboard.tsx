@@ -9,6 +9,7 @@ import { SettingsModal } from "@/components/SettingsModal";
 import { useAuth } from "@/hooks/use-auth";
 import { AnalyzingOverlay } from "./AnalyzingOverlay";
 import { ProTutorial, PRO_TUTORIAL_STORAGE_KEY } from "./ProTutorial";
+import { KeywordManager } from "./KeywordManager";
 import { Person, PersonTag, ProspectStatus, Circle, AnalysisStatus, Temperature, isProspect, isInCircle, temperatureRank, getEffectiveTemperature } from "./types";
 import { exportPeopleSummaryToPDF } from "../../utils/pdfExport";
 import type { InstagramAccount } from "@/hooks/use-accounts";
@@ -215,6 +216,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
               timestamp: new Date(x.timestamp),
               description: x.description,
               postUrl: x.postUrl || undefined,
+              keyword: x.keyword || undefined,
             }));
             const lastActivity = s.lastLikeGivenAt
               ? new Date(s.lastLikeGivenAt)
@@ -225,6 +227,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
               postUrl: e.postUrl,
               liked: !!e.liked,
               commented: !!e.commented,
+              keyword: e.keyword || undefined,
               timestamp: e.timestamp ? new Date(e.timestamp) : undefined,
               gapBefore: e.gapBefore || 0,
             }));
@@ -238,6 +241,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
             const newAdvice = Array.isArray(s.advice) ? s.advice : [];
             if (
               (p.score ?? 0) === (s.score ?? 0) &&
+              (p.keywordHits ?? 0) === (s.keywordHits ?? 0) &&
               (p.signals?.length || 0) === signals.length &&
               localWithUrl === backendWithUrl &&
               (p.followDuration ?? 0) === (s.connectionDays ?? 0) &&
@@ -258,6 +262,7 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
             return {
               ...p,
               score: s.score,
+              keywordHits: s.keywordHits ?? p.keywordHits,
               mutualConnections: s.mutualConnections,
               mutualConnectionsList: Array.isArray(s.mutualConnectionsList) ? s.mutualConnectionsList : p.mutualConnectionsList,
               followsYou: typeof s.followsYou === 'boolean' ? s.followsYou : p.followsYou,
@@ -900,6 +905,14 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
                   <span className="text-xs text-gray-400">{t.proDashboard.stats.networkQuality}</span>
                 </div>
           </div>
+
+          {/* Mots-clés de campagne : détecte les People qui commentent un mot-clé
+              (signal d'intention) — scopé au compte affiché. */}
+          <KeywordManager
+            accountUsername={
+              accounts.find((a) => a.id === (peopleAccountFilter !== 'all' ? peopleAccountFilter : activeAccountId))?.username
+            }
+          />
 
           {/* Panneau de contrôle : recherche + filtres regroupés dans une seule carte */}
           <div className="bg-black/40 backdrop-blur-sm border border-white/10 rounded-2xl p-4 mb-6 space-y-4">
