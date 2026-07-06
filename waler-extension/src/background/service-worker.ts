@@ -272,12 +272,6 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: a
         sendResponse({ success: true });
         break;
 
-      case 'TRACK_POTENTIAL_BLOCKER':
-      case 'TRACK_GHOST':
-        await syncManager.trackGhost(message.data);
-        sendResponse({ success: true });
-        break;
-
       case 'PERSON_CLASSIFIED':
         await syncManager.classifyPerson();
         sendResponse({ success: true });

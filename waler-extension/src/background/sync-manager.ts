@@ -3,7 +3,7 @@ import { accountGet, accountSet } from './account-storage.js';
 import { API_URL } from '../config.js';
 
 interface TrackedData {
-  type: 'follower' | 'unfollower' | 'ghost' | 'engagement';
+  type: 'follower' | 'unfollower' | 'engagement';
   username: string;
   avatarUrl?: string;
   timestamp: number;
@@ -47,18 +47,6 @@ export class SyncManager {
     // Synchroniser immédiatement les unfollowers
     console.log('🚀 Unfollower detected, syncing immediately...');
     await this.syncToServer();
-  }
-
-  async trackGhost(data: any) {
-    await this.addToQueue({
-      type: 'ghost',
-      username: data.username,
-      avatarUrl: data.avatarUrl,
-      timestamp: Date.now(),
-      metadata: data.metadata,
-    });
-
-    await this.incrementStat('ghost');
   }
 
   async trackEngagement(data: any) {
@@ -119,6 +107,14 @@ export class SyncManager {
     try {
       console.log(`📤 Syncing ${queue.length} items...`);
 
+      // Cibler EXPLICITEMENT le compte Instagram actif (son accountId backend)
+      // pour que le serveur écrive les events sur le bon compte, même si la
+      // session backend (activeAccountId) n'est pas alignée. Miroir de
+      // syncFullDatabase. Le serveur valide l'appartenance à l'owner.
+      const activeStore = await chrome.storage.local.get('activeDsUserId');
+      const reg = await accountGet('accountRegistry');
+      const activeAccountId = reg.accountRegistry?.accounts?.[activeStore.activeDsUserId]?.accountId;
+
       const response = await fetch(`${this.API_URL}/extension/sync`, {
         method: 'POST',
         credentials: 'include', // requireAuth = cookie de session du dashboard
@@ -128,6 +124,7 @@ export class SyncManager {
         },
         body: JSON.stringify({
           userId: stored.userId,
+          accountId: activeAccountId,
           data: queue,
         }),
       });
@@ -209,7 +206,7 @@ export class SyncManager {
     };
   }
 
-  async incrementStat(type: 'follower' | 'unfollower' | 'ghost' | 'engagement') {
+  async incrementStat(type: 'follower' | 'unfollower' | 'engagement') {
     const stored = await accountGet('sessionStats');
     const sessionStats = stored.sessionStats || {
       followers: 0,
@@ -226,10 +223,6 @@ export class SyncManager {
     } else if (type === 'unfollower') {
       // La personne quitte PENDING pour la section Unfollowers.
       sessionStats.unfollowers++;
-      sessionStats.pendingClassification = Math.max(0, (sessionStats.pendingClassification || 0) - 1);
-    } else if (type === 'ghost') {
-      // La personne quitte PENDING pour la section Ghost.
-      sessionStats.ghost = (sessionStats.ghost || 0) + 1;
       sessionStats.pendingClassification = Math.max(0, (sessionStats.pendingClassification || 0) - 1);
     } else if (type === 'engagement') sessionStats.engagements++;
 
