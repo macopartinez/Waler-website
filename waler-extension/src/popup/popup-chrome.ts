@@ -217,6 +217,7 @@ async function checkInitialScanStatus() {
  */
 async function renderScanBudgetStatus() {
   const noteEl = document.getElementById('scan-budget-note');
+  const estimateEl = document.getElementById('scan-budget-estimate');
   const alertEl = document.getElementById('scan-budget-alert');
   const alertTitle = document.getElementById('scan-budget-alert-title');
   const alertBody = document.getElementById('scan-budget-alert-body');
@@ -226,6 +227,31 @@ async function renderScanBudgetStatus() {
 
   try {
     const state = await getScanBudget();
+
+    // Transparence : pour un gros compte, on affiche une estimation chiffrée de
+    // la durée du premier scan complet (dérivée du budget quotidien). On ne la
+    // montre que si le compte est assez gros pour dépasser un jour de budget, et
+    // pas une fois le baseline terminé. Source du total : lastFollowerCount
+    // (source de vérité par compte), repli sur la cible interceptée du baseline.
+    if (estimateEl) {
+      const stored = await accountGet('lastFollowerCount');
+      const followerCount =
+        typeof stored.lastFollowerCount === 'number' && stored.lastFollowerCount > 0
+          ? stored.lastFollowerCount
+          : state.targetCount;
+      if (followerCount > DAILY_SCAN_BUDGET && state.status !== 'done') {
+        const days = Math.ceil(followerCount / DAILY_SCAN_BUDGET);
+        estimateEl.textContent = fmt(T.scanBudget.largeAccountEstimate, {
+          count: followerCount.toLocaleString(),
+          budget: DAILY_SCAN_BUDGET.toLocaleString(),
+          days,
+        });
+        estimateEl.style.display = 'block';
+      } else {
+        estimateEl.style.display = 'none';
+      }
+    }
+
     if (state.status === 'paused-budget') {
       alertTitle.textContent = T.scanBudget.pausedTitle;
       alertBody.textContent = fmt(T.scanBudget.pausedBody, { n: state.scannedToday });

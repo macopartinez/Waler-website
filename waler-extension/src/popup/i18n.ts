@@ -70,6 +70,7 @@ const en = {
   },
   scanBudget: {
     safetyNote: 'Large accounts are scanned gradually — up to {n} followers/day — to keep your Instagram account safe.',
+    largeAccountEstimate: 'Your account has {count} followers. At {budget}/day, a first full scan takes about {days} days — it runs on its own and resumes each day.',
     pausedTitle: 'Scan paused — daily limit reached',
     pausedBody: '{n} followers scanned today. The scan will resume automatically tomorrow.',
     rateLimitedTitle: 'Scan paused — Instagram slowed us down',
@@ -204,6 +205,7 @@ const fr: PopupTranslations = {
   },
   scanBudget: {
     safetyNote: 'Les gros comptes sont scannés progressivement — jusqu\'à {n} abonnés/jour — pour protéger votre compte Instagram.',
+    largeAccountEstimate: 'Votre compte a {count} abonnés. À {budget}/jour, un premier scan complet prend environ {days} jours — il tourne tout seul et reprend chaque jour.',
     pausedTitle: 'Scan en pause — limite quotidienne atteinte',
     pausedBody: '{n} abonnés scannés aujourd\'hui. Le scan reprendra automatiquement demain.',
     rateLimitedTitle: 'Scan en pause — Instagram a ralenti l\'accès',
