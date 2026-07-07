@@ -279,6 +279,65 @@ export function ProDashboard({ accounts, activeAccountId, onAccountChange }: Pro
               lastAnalyzedAt: new Date(),
             };
           });
+
+          // Importer les People créées AILLEURS (extension via ADD_PRO_PERSON,
+          // autre appareil) : le backend (circle_members) fait foi. syncStats
+          // n'enrichissait QUE les People déjà en local → une personne ajoutée
+          // depuis l'extension (bulle flottante / bouton Pro) n'apparaissait
+          // jamais sur le site. On ajoute ici celles absentes du local.
+          const known = new Set(next.map((p) => p.instagramUsername.toLowerCase()));
+          const imported: Person[] = [];
+          for (const s of data.stats) {
+            const uname = String(s.username || '');
+            if (!uname || known.has(uname.toLowerCase())) continue;
+            const sig = (s.signals || []).map((x: any) => ({
+              type: x.type,
+              timestamp: new Date(x.timestamp),
+              description: x.description,
+              postUrl: x.postUrl || undefined,
+              keyword: x.keyword || undefined,
+            }));
+            const engPattern = (s.engagementPattern || []).map((e: any) => ({
+              postId: e.postId,
+              postUrl: e.postUrl,
+              liked: !!e.liked,
+              commented: !!e.commented,
+              keyword: e.keyword || undefined,
+              timestamp: e.timestamp ? new Date(e.timestamp) : undefined,
+              gapBefore: e.gapBefore || 0,
+            }));
+            imported.push({
+              // Id stable par username → idempotent (pas de doublon aux polls suivants).
+              id: `ext-${uname.toLowerCase()}`,
+              instagramUsername: uname,
+              displayName: uname,
+              accountId: activeAccountId ?? undefined,
+              accountUsername: activeUsername,
+              followsYou: typeof s.followsYou === 'boolean' ? s.followsYou : false,
+              youFollow: typeof s.youFollow === 'boolean' ? s.youFollow : false,
+              addedAt: new Date(),
+              notes: '',
+              signals: sig,
+              tags: ['prospect'],
+              score: s.score,
+              keywordHits: s.keywordHits ?? 0,
+              followDuration: s.connectionDays ?? 0,
+              engagementPattern: engPattern,
+              temperature: s.temperature || undefined,
+              dynamics: s.dynamics || undefined,
+              advice: Array.isArray(s.advice) ? s.advice : [],
+              settingPhase: s.settingPhase || undefined,
+              settingSummary: s.settingSummary || undefined,
+              mutualConnections: s.mutualConnections,
+              mutualConnectionsList: Array.isArray(s.mutualConnectionsList) ? s.mutualConnectionsList : undefined,
+              lastActivity: sig[0]?.timestamp,
+              lastAnalyzedAt: s.settingSummary ? new Date() : undefined,
+            });
+          }
+          if (imported.length > 0) {
+            console.log('📥 [People] Import backend →', imported.length, 'nouvelle(s) People');
+            return [...next, ...imported];
+          }
           return changed ? next : prev;
         });
       } catch {

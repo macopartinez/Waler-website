@@ -23,7 +23,8 @@ import {
   setActiveAccount,
   isAccountOwnedBy,
   getAccountsForOwner,
-  findOrCreateLinkedAccount
+  findOrCreateLinkedAccount,
+  restoreActiveAccount
 } from "./auth";
 import { maxAccountsForTier } from "@shared/accounts";
 import { requireAuth, requireOwnership, rateLimit, requireVerified, requireAdmin, requireActiveSubscription, getLoginLockout, recordFailedLogin, clearLoginAttempts } from "./middleware";
@@ -380,13 +381,17 @@ export async function registerRoutes(
       clearLoginAttempts(input.email);
 
       // Regenerate session to prevent fixation
-      req.session.regenerate((err) => {
+      req.session.regenerate(async (err) => {
         if (err) {
           console.error("Session regeneration error:", err);
           return res.status(500).json({ message: "Erreur de session" });
         }
         
         setCurrentUser(req, user.id);
+        // Restaure le dernier compte Instagram actif (sinon on retombe sur le
+        // compte owner par défaut, ce qui masque les données scopées au compte
+        // précédemment sélectionné, ex: mots-clés de campagne).
+        await restoreActiveAccount(req, user.id);
         
         // Explicitly save session to ensure it's persisted
         req.session.save((saveErr) => {
@@ -1633,6 +1638,7 @@ export async function registerRoutes(
         const isValid = await verifyPassword(input.password, existingUser.passwordHash);
         if (isValid) {
           setCurrentUser(req, existingUser.id);
+          await restoreActiveAccount(req, existingUser.id);
           const { passwordHash, ...safeUser } = existingUser;
           return res.json(safeUser);
         }

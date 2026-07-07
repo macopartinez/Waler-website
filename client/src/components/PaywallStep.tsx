@@ -3,6 +3,7 @@ import { Sparkles, Check, Users, Star } from "lucide-react";
 import { QuestionnaireAnswers, UsageMode } from "@/types/questionnaire";
 import { getLocalizedPricingPlans } from "@/config/pricing";
 import { useOfferCountdown, resolveYearlyPrice, yearlyStandardPrice } from "@/hooks/use-offer-countdown";
+import { usePlans } from "@/hooks/use-subscription";
 import { useMemo } from "react";
 import { useLanguage, interpolate } from "@/contexts/LanguageContext";
 import type { Translations } from "@/lib/i18n/en";
@@ -113,10 +114,21 @@ export function PaywallStep({ answers, selectedPlan, onPlanSelect, usageMode, bi
   // tarification) : une fois le compte à rebours expiré, l'annuel redevient 12× le mensuel.
   const { offerActive } = useOfferCountdown();
 
-  const planMonthly = (planId: 'premium' | 'pro') => (planId === 'premium' ? 4.99 : 19.99);
-  // Prix annuel « offre » remisé (~20%), aligné sur le serveur/Stripe (plans.ts).
-  // 12× le mensuel (Pro : 239.88) = prix standard sans remise.
-  const planYearlyOffer = (planId: 'premium' | 'pro') => (planId === 'premium' ? 47.99 : 191.99);
+  // Prix réels synchronisés avec Stripe via /api/plans (server/plans.ts fetch
+  // les Price objects live) — on ne hardcode plus de montants côté client.
+  const { data: apiPlans } = usePlans();
+  const PLAN_ID_TO_SERVER_NAME: Record<'premium' | 'pro', string> = { premium: 'base', pro: 'pro' };
+  const getApiPlan = (planId: 'premium' | 'pro') =>
+    apiPlans?.find((p) => p.name === PLAN_ID_TO_SERVER_NAME[planId]);
+
+  const planMonthly = (planId: 'premium' | 'pro') => {
+    const plan = getApiPlan(planId);
+    return plan ? plan.priceMonthly / 100 : 0;
+  };
+  const planYearlyOffer = (planId: 'premium' | 'pro') => {
+    const plan = getApiPlan(planId);
+    return plan ? plan.priceYearly / 100 : 0;
+  };
 
   // Prix dynamiques selon le billing period
   const getPlanPrice = (planId: 'premium' | 'pro') => {

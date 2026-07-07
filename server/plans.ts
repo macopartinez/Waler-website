@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { stripe } from "./stripe";
 
 export interface PlanInfo {
   id: number;
@@ -97,25 +98,71 @@ function tierToPlanName(tier: string | null): string {
   return tier === "pro" ? "pro" : "base";
 }
 
+// Les montants dans DEFAULT_PLANS ne sont que des valeurs de repli (affichées
+// si Stripe est injoignable ou si aucun Price ID n'est configuré). La source
+// de vérité réelle est Stripe : on récupère le unit_amount des Price objects
+// pour que l'UI (et le montant facturé) restent toujours synchronisés, même
+// si le prix est changé côté Dashboard Stripe sans toucher au code.
+let plansCache: { data: PlanInfo[]; expiresAt: number } | null = null;
+const PLANS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function fetchStripeUnitAmount(priceId: string | null): Promise<number | null> {
+  if (!priceId) return null;
+  try {
+    const price = await stripe.prices.retrieve(priceId);
+    return typeof price.unit_amount === "number" ? price.unit_amount : null;
+  } catch (err) {
+    console.error(`Impossible de récupérer le prix Stripe ${priceId}, valeur de repli utilisée:`, err);
+    return null;
+  }
+}
+
+async function resolvePlanPrices(plan: PlanInfo): Promise<PlanInfo> {
+  const [liveMonthly, liveYearly] = await Promise.all([
+    fetchStripeUnitAmount(plan.stripePriceIdMonthly),
+    fetchStripeUnitAmount(plan.stripePriceIdYearly),
+  ]);
+
+  return {
+    ...plan,
+    priceMonthly: liveMonthly ?? plan.priceMonthly,
+    priceYearly: liveYearly ?? plan.priceYearly,
+  };
+}
+
+async function loadPlansWithLivePrices(): Promise<PlanInfo[]> {
+  if (plansCache && plansCache.expiresAt > Date.now()) {
+    return plansCache.data;
+  }
+
+  const data = await Promise.all(DEFAULT_PLANS.map(resolvePlanPrices));
+  plansCache = { data, expiresAt: Date.now() + PLANS_CACHE_TTL_MS };
+  return data;
+}
+
 /**
- * Récupère tous les plans actifs
+ * Récupère tous les plans actifs, avec les montants réels synchronisés
+ * depuis Stripe (fallback sur DEFAULT_PLANS si Stripe est indisponible).
  */
 export async function getActivePlans(): Promise<PlanInfo[]> {
-  return DEFAULT_PLANS.filter((p) => p.isActive);
+  const plans = await loadPlansWithLivePrices();
+  return plans.filter((p) => p.isActive);
 }
 
 /**
  * Récupère un plan par son nom
  */
 export async function getPlanByName(name: string): Promise<PlanInfo | null> {
-  return DEFAULT_PLANS.find((p) => p.name === name) ?? null;
+  const plans = await loadPlansWithLivePrices();
+  return plans.find((p) => p.name === name) ?? null;
 }
 
 /**
  * Récupère un plan par son ID
  */
 export async function getPlanById(id: number): Promise<PlanInfo | null> {
-  return DEFAULT_PLANS.find((p) => p.id === id) ?? null;
+  const plans = await loadPlansWithLivePrices();
+  return plans.find((p) => p.id === id) ?? null;
 }
 
 /**

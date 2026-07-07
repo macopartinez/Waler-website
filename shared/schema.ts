@@ -11,6 +11,11 @@ export const users = pgTable("app_users", {
   // Multi-compte : un login (owner) possède plusieurs comptes Instagram.
   // ownerId = null pour le login principal (créé à l'inscription), sinon id du login owner.
   ownerId: integer("owner_id"),
+  // Multi-compte : dernier compte Instagram actif choisi par ce login owner.
+  // Restauré en session à la connexion pour éviter de retomber sur le compte
+  // owner par défaut après une déconnexion/reconnexion (perte apparente des
+  // données scopées au compte, ex: mots-clés de campagne).
+  lastActiveAccountId: integer("last_active_account_id"),
   instagramUserId: text("instagram_user_id"), // ds_user_id Instagram (dédoublonne un compte lié)
   platform: text("platform").notNull().default("instagram"), // Always 'instagram'
   avatarUrl: text("avatar_url"),
