@@ -437,7 +437,10 @@
       </div>
 
       <!-- Mention permanente de la limite de sécurité (budget quotidien de scan) -->
-      <div id="scan-budget-note" style="font-size: 11px; color: hsl(240, 5%, 55%); line-height: 1.5; margin: -6px 0 16px;"></div>
+      <div id="scan-budget-note" style="font-size: 11px; color: hsl(240, 5%, 55%); line-height: 1.5; margin: -6px 0 8px;"></div>
+
+      <!-- Estimation de durée du premier scan pour les gros comptes (transparence) -->
+      <div id="scan-budget-estimate" style="display: none; font-size: 11px; color: hsl(240, 5%, 65%); line-height: 1.5; margin: 0 0 16px; padding: 8px 10px; border-left: 2px solid hsl(142, 76%, 36%); background: hsl(142, 76%, 36%, 0.06); border-radius: 4px;"></div>
 
       <!-- Indicateur d'analyse en cours -->
       <div id="analysis-indicator" class="sync-status" style="display: none; border-color: hsl(142, 76%, 36%, 0.3); background: hsl(142, 76%, 36%, 0.1);">
@@ -510,6 +513,12 @@
           <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:hsl(240,5%,64.9%); margin-bottom:12px; cursor:pointer;">
             <input type="checkbox" id="pro-always-ask" style="width:14px; height:14px; accent-color:#02c950; cursor:pointer; flex-shrink:0;">
             <span data-i18n="pro.alwaysAsk">Always ask before opening a conversation</span>
+          </label>
+
+          <!-- Panneau de coaching live in-page (opt-out : coché par défaut). Lu par pro-conversation-collector.ts. -->
+          <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:hsl(240,5%,64.9%); margin-bottom:12px; cursor:pointer;">
+            <input type="checkbox" id="pro-show-coach" style="width:14px; height:14px; accent-color:#02c950; cursor:pointer; flex-shrink:0;">
+            <span data-i18n="pro.showCoach">Show live coaching in the conversation</span>
           </label>
 
           <button class="btn btn-primary" id="pro-engagement-btn" style="width: 100%; margin-bottom: 12px; font-size: 13px;"><span data-icon="search"></span> <span data-i18n="pro.analyzeEngagement">Analyze engagement (posts)</span></button>

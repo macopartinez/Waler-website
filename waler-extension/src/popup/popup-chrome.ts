@@ -217,6 +217,7 @@ async function checkInitialScanStatus() {
  */
 async function renderScanBudgetStatus() {
   const noteEl = document.getElementById('scan-budget-note');
+  const estimateEl = document.getElementById('scan-budget-estimate');
   const alertEl = document.getElementById('scan-budget-alert');
   const alertTitle = document.getElementById('scan-budget-alert-title');
   const alertBody = document.getElementById('scan-budget-alert-body');
@@ -226,6 +227,31 @@ async function renderScanBudgetStatus() {
 
   try {
     const state = await getScanBudget();
+
+    // Transparence : pour un gros compte, on affiche une estimation chiffrée de
+    // la durée du premier scan complet (dérivée du budget quotidien). On ne la
+    // montre que si le compte est assez gros pour dépasser un jour de budget, et
+    // pas une fois le baseline terminé. Source du total : lastFollowerCount
+    // (source de vérité par compte), repli sur la cible interceptée du baseline.
+    if (estimateEl) {
+      const stored = await accountGet('lastFollowerCount');
+      const followerCount =
+        typeof stored.lastFollowerCount === 'number' && stored.lastFollowerCount > 0
+          ? stored.lastFollowerCount
+          : state.targetCount;
+      if (followerCount > DAILY_SCAN_BUDGET && state.status !== 'done') {
+        const days = Math.ceil(followerCount / DAILY_SCAN_BUDGET);
+        estimateEl.textContent = fmt(T.scanBudget.largeAccountEstimate, {
+          count: followerCount.toLocaleString(),
+          budget: DAILY_SCAN_BUDGET.toLocaleString(),
+          days,
+        });
+        estimateEl.style.display = 'block';
+      } else {
+        estimateEl.style.display = 'none';
+      }
+    }
+
     if (state.status === 'paused-budget') {
       alertTitle.textContent = T.scanBudget.pausedTitle;
       alertBody.textContent = fmt(T.scanBudget.pausedBody, { n: state.scannedToday });
@@ -560,6 +586,18 @@ function initProSection(isPro: boolean) {
       };
     }
 
+    // Coaching live in-page : opt-out (coché par défaut → seul `false` explicite
+    // le désactive). Même clé lue par pro-conversation-collector.ts.
+    const showCoachBox = document.getElementById('pro-show-coach') as HTMLInputElement | null;
+    if (showCoachBox) {
+      void chrome.storage.local.get(PRO_SHOW_COACH_KEY).then((s) => {
+        showCoachBox.checked = s[PRO_SHOW_COACH_KEY] !== false;
+      });
+      showCoachBox.onchange = () => {
+        void chrome.storage.local.set({ [PRO_SHOW_COACH_KEY]: showCoachBox.checked });
+      };
+    }
+
     void populateProAccountSelect();
   } else {
     upsell.style.display = 'block';
@@ -624,6 +662,9 @@ const PRO_ACCOUNT_KEY = 'proSelectedAccount';
 // Réglage « toujours demander avant d'ouvrir une conversation » (filet de sécurité
 // indépendant de la détection non-lu). Lu par pro-conversation-collector.ts.
 const PRO_ALWAYS_ASK_KEY = 'proAlwaysAskBeforeOpen';
+// Réglage « afficher le coaching live » (opt-out, défaut activé). Lu par
+// pro-conversation-collector.ts pour rendre ou non le panneau in-page.
+const PRO_SHOW_COACH_KEY = 'proShowLiveCoach';
 
 /**
  * Remplit le sélecteur « Compte analysé » de la section Pro à partir des comptes

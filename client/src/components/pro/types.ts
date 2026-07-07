@@ -73,6 +73,8 @@ export interface ConversationDynamics {
   msgCount: number;
   myMsgCount: number;
   theirMsgCount: number;
+  storyReplyCount?: number; // réponses reçues à mes stories (engagement entrant)
+  reelReplyCount?: number;  // réponses reçues à mes reels (engagement entrant)
   cadenceTrend: 'up' | 'down' | 'flat';
   temperatureScore: number; // 0-100
   temperature: Temperature;

@@ -963,43 +963,47 @@ export class SettingCoach {
    */
   private nextStep(phase: SettingPhase, hasBusiness: boolean, lang: Lang, facts?: ConversationFacts): string {
     const goal = facts?.goal || null;
+    // Format : « Phase — objectif (checkpoint, ce qu'il faut obtenir) : « exemple » ».
+    // Le panneau live mène AVEC le checkpoint et relègue l'exemple derrière un
+    // « exemple » repliable — l'utilisateur reformule dans ses mots (il mène sa
+    // danse), l'outil ne lui souffle pas une réplique à copier-coller.
     if (lang === 'fr') {
       switch (phase) {
         case 'connexion':
-          return 'Connexion — cerne son objectif : « Qu\'est-ce qui t\'amène à chercher ce genre d\'aide ? Tu sais déjà quel type d\'accompagnement tu cherches ? »';
+          return 'Connexion — fais-lui exprimer ce qu\'il cherche : le déclic qui l\'amène et le type d\'aide qu\'il vise. « Qu\'est-ce qui t\'amène à chercher ce genre d\'aide ? Tu sais déjà quel accompagnement tu cherches ? »';
         case 'situation':
           return hasBusiness
-            ? 'Situation — comprends son activité : « Tu fais quoi exactement ? Depuis combien de temps ? Et t\'as fait combien le mois dernier ? »'
-            : 'Situation — comprends son contexte : « Tu fais quoi en ce moment ? Depuis combien de temps ? Qu\'est-ce qui t\'a poussé à choisir ça au départ ? »';
+            ? 'Situation — cerne son activité : ce qu\'il fait, depuis quand, et son niveau actuel (CA du mois dernier). « Tu fais quoi exactement ? Depuis combien de temps ? T\'as fait combien le mois dernier ? »'
+            : 'Situation — cerne son contexte : ce qu\'il fait en ce moment, depuis quand, et pourquoi il a choisi ça. « Tu fais quoi en ce moment ? Depuis combien de temps ? Qu\'est-ce qui t\'a poussé à choisir ça ? »';
         case 'probleme':
           return hasBusiness
-            ? 'Problème — creuse la douleur : « Qu\'est-ce qui te manque pour avoir fait plus que ça le mois dernier ? Ça impacte quoi sur ton business / ton quotidien ? »'
-            : 'Problème — creuse la douleur : « Qu\'est-ce qui fait que ta situation actuelle ne te suffit pas ? Ça dure depuis combien de temps, et ça a quel impact sur toi ? »';
+            ? 'Problème — fais-lui nommer sa douleur : ce qui le bloque pour faire plus, et l\'impact sur son business et son quotidien. « Qu\'est-ce qui te manque pour avoir fait plus le mois dernier ? Ça impacte quoi ? »'
+            : 'Problème — fais-lui nommer sa douleur : pourquoi sa situation ne lui suffit pas, depuis quand, et ce que ça lui coûte. « Qu\'est-ce qui fait que ta situation ne te suffit pas ? Ça dure depuis quand, quel impact ? »';
         case 'transition': {
           // Improvisation : on rappelle SON objectif chiffré quand on le connaît.
-          const intro = goal
-            ? `Avec ton objectif (${goal}) et tout ce que tu m'as dit`
-            : `Avec tout ce que tu m'as dit`;
-          return `Transition — propose le call : « ${intro}, ça ressemble à quelque chose sur lequel je peux t'aider. La prochaine étape serait de planifier un call pour confirmer comment. Ça t'aiderait ? »`;
+          const anchor = goal
+            ? `en t'appuyant sur son objectif (${goal}) et ce qu'il t'a confié`
+            : `en t'appuyant sur ce qu'il t'a confié`;
+          return `Transition — propose le call ${anchor}. « Avec tout ce que tu m'as dit, la prochaine étape serait qu'on cale un call pour voir comment je peux t'aider. Ça te va ? »`;
         }
       }
     }
     switch (phase) {
       case 'connexion':
-        return 'Connection — pin down their goal: "What brought you to look for this kind of help? Do you already know what type of help you\'re after?"';
+        return 'Connection — get them to voice what they want: the trigger that brought them and the type of help they\'re after. "What brought you to look for this kind of help? Do you already know what help you\'re after?"';
       case 'situation':
         return hasBusiness
-          ? 'Situation — understand their business: "What exactly do you do? How long have you been at it? And how much did you make last month?"'
-          : 'Situation — understand their context: "What are you up to right now? For how long? What made you choose that in the first place?"';
+          ? 'Situation — map their business: what they do, how long, and where they stand (last month\'s revenue). "What exactly do you do? How long have you been at it? How much did you make last month?"'
+          : 'Situation — map their context: what they do now, how long, and why they chose it. "What are you up to right now? For how long? What made you choose that?"';
       case 'probleme':
         return hasBusiness
-          ? 'Problem — dig into the pain: "What\'s missing for you to have made only that last month? How does it affect your business / your day-to-day revenue?"'
-          : 'Problem — dig into the pain: "What makes you feel your current situation isn\'t enough? How long has it been going on, and what impact does it have on you?"';
+          ? 'Problem — get them to name the pain: what\'s holding their numbers back and how it hits their business and day-to-day. "What\'s missing for you to have made more last month? How does it affect you?"'
+          : 'Problem — get them to name the pain: why their situation isn\'t enough, how long it\'s lasted, and what it costs them. "What makes your situation not enough? How long has it lasted, what impact?"';
       case 'transition': {
-        const intro = goal
-          ? `With your goal (${goal}) and everything you've told me`
-          : `From everything you've told me`;
-        return `Transition — offer the call: "${intro}, this sounds like something I can help you with. The next step would be to schedule a call to confirm how. Would that help?"`;
+        const anchor = goal
+          ? `anchored on their goal (${goal}) and what they told you`
+          : `anchored on what they told you`;
+        return `Transition — offer the call ${anchor}. "From everything you've told me, the next step would be to schedule a call to see how I can help. Would that work?"`;
       }
     }
   }

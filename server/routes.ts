@@ -201,6 +201,27 @@ function emitRelationshipSignal(
   }
 }
 
+/**
+ * Résout le bucket Pro (waler.db) d'un compte à partir de son id Postgres
+ * (app_users.id). Les deux espaces d'ID sont DISTINCTS : `circle_members.user_id`
+ * est l'id du bucket waler.db (créé PAR USERNAME via ensureWalerUserId), pas l'id
+ * Postgres. Passer l'id Postgres à emitRelationshipSignal ne matchait donc AUCUN
+ * circle_member dès que les deux id divergeaient — c.-à-d. tout compte secondaire
+ * (le compte principal ne « marchait » que par coïncidence id=1==1). On retrouve
+ * le bon bucket via le username du compte (le même que celui qui l'a créé).
+ * Renvoie null si le compte n'a pas encore de bucket Pro → rien à signaler.
+ */
+async function resolveProBucketId(sqlite: any, pgAccountId: number): Promise<number | null> {
+  try {
+    const acct = await getUserById(pgAccountId);
+    if (!acct?.username) return null;
+    return resolveWalerUserId(sqlite, acct.username);
+  } catch (e: any) {
+    console.error("resolveProBucketId error:", e?.message);
+    return null;
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express,
@@ -2022,7 +2043,18 @@ export async function registerRoutes(
   // Sync data from extension
   app.post("/api/extension/sync", requireAuth, requireActiveSubscription, async (req, res) => {
     try {
-      const userId = getActiveAccount(req);
+      // Cibler EXPLICITEMENT le compte envoyé par l'extension (accountId) plutôt
+      // que de faire confiance à session.activeAccountId, qui peut être désaligné
+      // sur l'onglet Instagram actif (bascule /api/accounts/switch pas encore
+      // faite). Sans ça, un nouveau follower temps réel peut être écrit sur le
+      // MAUVAIS compte. On valide que l'accountId appartient bien au login owner.
+      // Miroir de /extension/sync-full.
+      const ownerId = getCurrentUser(req);
+      const bodyAccountId = Number(req.body.accountId);
+      let userId = getActiveAccount(req);
+      if (ownerId && bodyAccountId && (await isAccountOwnedBy(bodyAccountId, ownerId))) {
+        userId = bodyAccountId;
+      }
       if (!userId) {
         return res.status(401).json({ message: "Non authentifié" });
       }
@@ -2121,8 +2153,19 @@ export async function registerRoutes(
       let skipped = 0;
       let recovered = 0;
 
-      // SQLite pour émettre les signaux Pro (follow / refollow) sur les fiches suivies.
-      const sqlite = new Database(path.join(moduleDir, "waler.db"));
+      // SQLite = signaux Pro (follow / refollow) best-effort. Son ouverture ne doit
+      // JAMAIS bloquer la sauvegarde Postgres des followers (données base) : sur
+      // certains déploiements le FS/`moduleDir` peut faire échouer `new Database()`,
+      // ce qui nuquait toute la sauvegarde. Miroir de /verify-missing-followers.
+      let sqlite: any = null;
+      try {
+        sqlite = new Database(path.join(moduleDir, "waler.db"));
+      } catch (e: any) {
+        console.error("⚠️ SQLite indisponible (signaux Pro ignorés, sauvegarde PG maintenue):", e?.message);
+      }
+      // Bucket Pro (waler.db) du compte, résolu par username — PAS l'id Postgres
+      // (espaces d'ID distincts, cf. resolveProBucketId). null = pas de fiches Pro.
+      const proUserId = sqlite ? await resolveProBucketId(sqlite, userId) : null;
       try {
         for (const follower of followers) {
           try {
@@ -2147,7 +2190,10 @@ export async function registerRoutes(
                   `UPDATE unfollowers SET recovered_at = NOW() WHERE id = $1`,
                   [prev.rows[0].id]
                 );
-                emitRelationshipSignal(sqlite, userId, follower.username, 'refollow');
+                if (sqlite && proUserId) {
+                  try { emitRelationshipSignal(sqlite, proUserId, follower.username, 'refollow'); }
+                  catch (sigErr: any) { console.error(`Signal Pro refollow échoué pour @${follower.username}:`, sigErr?.message); }
+                }
                 recovered++;
               }
             }
@@ -2172,7 +2218,10 @@ export async function registerRoutes(
               });
               added++;
               // Nouveau follower : signal Pro si la personne est suivie en Pro.
-              emitRelationshipSignal(sqlite, userId, follower.username, 'follow');
+              if (sqlite && proUserId) {
+                try { emitRelationshipSignal(sqlite, proUserId, follower.username, 'follow'); }
+                catch (sigErr: any) { console.error(`Signal Pro follow échoué pour @${follower.username}:`, sigErr?.message); }
+              }
             } else {
               skipped++;
             }
@@ -2181,7 +2230,9 @@ export async function registerRoutes(
           }
         }
       } finally {
-        sqlite.close();
+        if (sqlite) {
+          try { sqlite.close(); } catch { /* noop */ }
+        }
       }
 
       console.log(`✅ Full sync complete: ${added} added, ${skipped} skipped, ${recovered} recovered`);
@@ -2863,6 +2914,9 @@ export async function registerRoutes(
         } catch (e: any) {
           console.error("⚠️ SQLite indisponible (signaux Pro ignorés, sauvegarde PG maintenue):", e?.message);
         }
+        // Bucket Pro (waler.db) du compte, résolu par username — PAS l'id Postgres
+        // (espaces d'ID distincts, cf. resolveProBucketId). null = pas de fiches Pro.
+        const proUserId = sqlite ? await resolveProBucketId(sqlite, userId) : null;
         try {
           const saveLost = async (
             usernames: string[] | undefined,
@@ -2899,9 +2953,9 @@ export async function registerRoutes(
                 saved++;
 
                 // Signal Pro best-effort : son échec ne doit pas faire échouer le save.
-                if (isNew && sqlite) {
+                if (isNew && sqlite && proUserId) {
                   try {
-                    emitRelationshipSignal(sqlite, userId, username, signalType);
+                    emitRelationshipSignal(sqlite, proUserId, username, signalType);
                   } catch (sigErr: any) {
                     console.error(`Signal Pro échoué pour @${username}:`, sigErr?.message);
                   }

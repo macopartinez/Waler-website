@@ -41,6 +41,11 @@ export interface ConversationDynamics {
   myMsgCount: number;
   theirMsgCount: number;
 
+  // Engagement entrant : le contact RÉPOND à mes stories / mes reels dans le DM.
+  // Deux signaux distincts ; plus le compte est élevé, plus la relation est chaude.
+  storyReplyCount: number; // réponses reçues à MES stories
+  reelReplyCount: number;  // réponses reçues à MES reels
+
   // Tendance de fréquence des échanges.
   cadenceTrend: 'up' | 'down' | 'flat';
 
@@ -77,6 +82,12 @@ export class ConversationDynamicsAnalyzer {
     const briefReplyRatio = this.computeBriefReplyRatio(sorted);
     const cadenceTrend = this.computeCadenceTrend(sorted);
 
+    // Réponses du contact à MES stories / reels (messages reçus tagués par
+    // l'extracteur). C'est un signal d'intérêt entrant : ils viennent réagir à
+    // mon contenu → on le compte séparément par type.
+    const storyReplyCount = sorted.filter((m) => !m.isSent && m.kind === 'story-reply').length;
+    const reelReplyCount = sorted.filter((m) => !m.isSent && m.kind === 'reel-reply').length;
+
     const last = sorted[sorted.length - 1];
     const lastMessageIsSent = last ? last.isSent : false;
     const lastTs = last?.timestamp ?? null;
@@ -94,6 +105,8 @@ export class ConversationDynamicsAnalyzer {
       msgCount: sorted.length,
       myMsgCount,
       theirMsgCount,
+      storyReplyCount,
+      reelReplyCount,
       cadenceTrend,
       temperatureScore: 0,
       temperature: 'cold',
@@ -127,6 +140,14 @@ export class ConversationDynamicsAnalyzer {
       tips.push(tr(
         'They messaged last — reply quickly to keep the momentum.',
         'C\'est à toi de répondre — fais-le vite pour garder la dynamique.'
+      ));
+    }
+
+    // Engagement entrant : il réagit à mes stories / reels → intérêt à exploiter.
+    if (dyn.storyReplyCount + dyn.reelReplyCount >= 2) {
+      tips.push(tr(
+        'They keep replying to your stories/reels — that\'s warm inbound interest, turn it into a real conversation.',
+        'Ils réagissent régulièrement à tes stories/reels — c\'est un intérêt entrant chaud, transforme-le en vraie conversation.'
       ));
     }
 
@@ -310,7 +331,25 @@ export class ConversationDynamicsAnalyzer {
     if (d.cadenceTrend === 'up') s += 10;
     else if (d.cadenceTrend === 'down') s -= 10;
 
+    // Réponses à mes stories / reels : engagement entrant fort. Effet croissant
+    // avec le nombre mais borné (rendements décroissants) — deux signaux séparés.
+    s += this.engagementReplyBonus(d.storyReplyCount);
+    s += this.engagementReplyBonus(d.reelReplyCount);
+
     return Math.max(0, Math.min(100, Math.round(s)));
+  }
+
+  /**
+   * Bonus de chaleur pour un type de réponse (story OU reel) selon le NOMBRE
+   * reçu : plus le contact réagit à mon contenu, plus la relation est chaude,
+   * avec des rendements décroissants (1 → +5, 2 → +8, 3+ → +10) pour ne pas
+   * saturer le score sur ce seul signal.
+   */
+  private engagementReplyBonus(count: number): number {
+    if (count <= 0) return 0;
+    if (count === 1) return 5;
+    if (count === 2) return 8;
+    return 10; // 3 réponses ou plus
   }
 
   private toTemperature(score: number): Temperature {
