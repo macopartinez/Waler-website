@@ -1,40 +1,26 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Crown, Check, X, ArrowLeft, Clock, Sparkles, Zap, Shield, Users, TrendingUp, Award, Star } from 'lucide-react';
+import { Crown, Check, X, ArrowLeft, Clock, Sparkles, Zap, Shield, Users, TrendingUp, Award, Star, Loader2 } from 'lucide-react';
 import { GlassText } from '@/components/GlassText';
 import { RadarBackground } from '@/components/RadarBackground';
 import { useOfferCountdown, resolveYearlyPrice, yearlyStandardPrice } from '@/hooks/use-offer-countdown';
+import { usePlans } from '@/hooks/use-subscription';
 import { useLanguage, interpolate } from '@/contexts/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 type BillingPeriod = 'monthly' | 'yearly';
 
-interface Plan {
-  id: 'premium' | 'pro';
-  priceMonthly: number;
-  priceYearly: number;
-  popular?: boolean;
-  icon: React.ElementType;
-}
+// planName (client) -> nom de plan côté serveur/Stripe (server/plans.ts).
+const PLAN_ID_TO_SERVER_NAME: Record<'premium' | 'pro', string> = {
+  premium: 'base',
+  pro: 'pro',
+};
 
-const PLAN_META: Plan[] = [
-  {
-    id: 'premium',
-    priceMonthly: 4.99,
-    priceYearly: 47.99,
-    icon: Star,
-  },
-  {
-    id: 'pro',
-    priceMonthly: 19.99,
-    // Prix annuel « offre » remisé (~20%), aligné sur le serveur/Stripe
-    // (plans.ts : 19199 centimes). 12× le mensuel = 239.88 sans remise.
-    priceYearly: 191.99,
-    icon: Crown,
-    popular: true,
-  },
-];
+const PLAN_ICONS: Record<'premium' | 'pro', React.ElementType> = {
+  premium: Star,
+  pro: Crown,
+};
 
 export default function PlanComparison() {
   const { t } = useLanguage();
@@ -42,6 +28,7 @@ export default function PlanComparison() {
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('yearly');
   const timeLeft = useOfferCountdown();
   const offerActive = timeLeft.offerActive;
+  const { data: apiPlans, isLoading: plansLoading } = usePlans();
 
   const formatTime = (value: number) => value.toString().padStart(2, '0');
 
@@ -52,12 +39,29 @@ export default function PlanComparison() {
     setLocation('/dashboard/1');
   };
 
-  const PLANS = PLAN_META.map((meta) => ({
-    ...meta,
-    displayName: t.planComparison.plans[meta.id].displayName,
-    features: t.planComparison.plans[meta.id].features,
-    limitations: t.planComparison.plans[meta.id].limitations,
-  }));
+  // Prix réels synchronisés avec Stripe (server/plans.ts fetch les Price
+  // objects live) — on ne hardcode plus de montants côté client.
+  const PLANS = (['premium', 'pro'] as const).map((id) => {
+    const apiPlan = apiPlans?.find((p) => p.name === PLAN_ID_TO_SERVER_NAME[id]);
+    return {
+      id,
+      priceMonthly: apiPlan ? apiPlan.priceMonthly / 100 : 0,
+      priceYearly: apiPlan ? apiPlan.priceYearly / 100 : 0,
+      icon: PLAN_ICONS[id],
+      popular: id === 'pro',
+      displayName: t.planComparison.plans[id].displayName,
+      features: t.planComparison.plans[id].features,
+      limitations: t.planComparison.plans[id].limitations,
+    };
+  });
+
+  if (plansLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#02c950]" />
+      </div>
+    );
+  }
 
   const getDiscount = () => {
     const premiumMonthly = PLANS[0].priceMonthly * 12;

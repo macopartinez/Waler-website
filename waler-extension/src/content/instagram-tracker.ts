@@ -500,9 +500,9 @@ class InstagramTracker {
       const resp = (await chrome.runtime.sendMessage({ type: 'GET_PEOPLE' })) as any;
       const people = resp && resp.success && Array.isArray(resp.people) ? resp.people : [];
       const usernames = people.map((p: any) => p.memberUsername).filter(Boolean);
-      if (usernames.length > 0) {
-        this.proCollector.startLiveWatch(usernames);
-      }
+      // Démarrer même avec 0 contact : c'est ce live watch qui suggère d'ajouter
+      // aux People quand on ouvre une conversation non suivie (sinon œuf-et-poule).
+      this.proCollector.startLiveWatch(usernames);
       // Profils pas encore collectés (profileCollectedAt null) → le panneau rappelle
       // qu'il reste l'analyse complète (engagement) pour remplir les stats.
       const incomplete = people
@@ -2804,14 +2804,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Récupère la liste des People puis lance l'analyse d'engagement (likes +
     // commentaires) sur les posts du compte connecté, en un seul passage.
     (async () => {
-      const ownUsername = tracker['currentUsername'] as string | null;
+      // Compte connecté : `currentUsername` (résolu via ds_user_id) en priorité,
+      // sinon repli sur le compte actif du registre (GET_ACCOUNTS) — évite l'échec
+      // « compte introuvable » si la résolution d'init n'a pas abouti (rate-limit,
+      // ou déclenchement depuis /direct/ où l'URL ne donne aucun pseudo).
+      let ownUsername = (tracker['currentUsername'] as string | null) || '';
+      if (!ownUsername) {
+        try {
+          const acc = (await chrome.runtime.sendMessage({ type: 'GET_ACCOUNTS' })) as any;
+          ownUsername = acc?.accounts?.[acc?.activeDsUserId]?.igUsername || '';
+        } catch { /* repli best-effort → start() gèrera l'absence */ }
+      }
       const resp = (await chrome.runtime.sendMessage({ type: 'GET_PEOPLE' })) as any;
       const people = resp && resp.success && Array.isArray(resp.people) ? resp.people : [];
       const targets = people.map((p: any) => p.memberUsername).filter(Boolean);
       // Mots-clés de campagne du compte actif → matchés EN LOCAL sur les commentaires.
       const kwResp = (await chrome.runtime.sendMessage({ type: 'GET_PRO_KEYWORDS' })) as any;
       const keywords = kwResp && kwResp.success && Array.isArray(kwResp.keywords) ? kwResp.keywords : [];
-      tracker['proEngagementCollector'].start(ownUsername || '', targets, keywords);
+      tracker['proEngagementCollector'].start(ownUsername, targets, keywords);
     })();
     sendResponse({ success: true });
   } else if (message.type === 'START_NOTIFICATION_CHECK') {

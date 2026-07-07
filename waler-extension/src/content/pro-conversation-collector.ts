@@ -565,6 +565,20 @@ export class ProConversationCollector {
   }
 
   /**
+   * Langue d'UI du coaching : choix explicite persisté (`walerLanguage`), sinon
+   * langue du navigateur — aligné sur `getLanguage()` du popup pour qu'un user FR
+   * qui n'a jamais touché au sélecteur n'ait pas des libellés en anglais.
+   */
+  private resolveUiLang(stored: unknown): 'en' | 'fr' {
+    if (stored === 'fr' || stored === 'en') return stored;
+    try {
+      return navigator.language && navigator.language.startsWith('fr') ? 'fr' : 'en';
+    } catch {
+      return 'en';
+    }
+  }
+
+  /**
    * Coeur d'analyse + persistance (sans overlay) — réutilisé par le flux manuel
    * et par l'analyse live (Phase 6).
    */
@@ -663,7 +677,7 @@ export class ProConversationCollector {
     //      - `advice`         = dynamique relationnelle (comportement) uniquement.
     const coaching = this.settingCoach.analyze(messages, dyn);
     const stored = await chrome.storage.local.get(['walerLanguage', 'proShowLiveCoach']);
-    const lang: 'en' | 'fr' = stored.walerLanguage === 'fr' ? 'fr' : 'en';
+    const lang = this.resolveUiLang(stored.walerLanguage);
     const advice = this.dynamics.buildAdvice(dyn, lang);
 
     // Coaching live in-page : on rend le panneau tant qu'on est sur le thread de
@@ -1377,7 +1391,7 @@ export class ProConversationCollector {
   private async showSuggestion(username: string, kind: SuggestionKind): Promise<void> {
     const stored = await chrome.storage.local.get(['walerLanguage', 'proShowLiveCoach']);
     if (stored.proShowLiveCoach === false) { this.coachPanel.hide(); return; }
-    const lang: 'en' | 'fr' = stored.walerLanguage === 'fr' ? 'fr' : 'en';
+    const lang = this.resolveUiLang(stored.walerLanguage);
     // needs_analysis (déjà dans People) → lance l'analyse directement.
     // not_tracked → ajoute d'abord aux People, PUIS lance l'analyse.
     const onCta =
@@ -1404,8 +1418,12 @@ export class ProConversationCollector {
         this.overlay.showError('Could not add to People');
         return;
       }
-      // start() navigue vers l'inbox (reload du content script) → l'overlay et le
-      // panneau sont recréés au retour ; la personne est désormais suivie.
+      // Marquer suivi IMMÉDIATEMENT : le fast path de start() (déjà sur le thread)
+      // n'entraîne PAS de reload, donc `livePeople` ne serait pas rafraîchi et le
+      // prochain liveTick re-proposerait « ajouter ». Ajout optimiste local.
+      this.livePeople.add(username.toLowerCase());
+      // start() analyse la conversation ouverte (fast path) ou navigue vers l'inbox ;
+      // au retour, la personne est désormais suivie.
       await this.start(username, fullName);
     } catch (e) {
       console.error('[Pro] addPersonAndAnalyze error', e);

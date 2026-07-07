@@ -27,6 +27,8 @@ const MUTED = 'rgba(255,255,255,0.5)';
 // Icônes lucide (line) — cohérence avec le reste de l'UI Waler.
 const ICON_DOT = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="${ACCENT}" stroke="none"><circle cx="12" cy="12" r="10"/></svg>`;
 const ICON_X = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+// Réduire le panneau en bulle flottante (lucide minimize-2).
+const ICON_MINIMIZE = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
 // Icônes des suggestions : « analyser » (pouls) et « pas dans People » (user+).
 const ICON_PULSE = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
 const ICON_USER_PLUS = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>`;
@@ -56,6 +58,9 @@ const PHASE_ORDER: SettingPhase[] = ['connexion', 'situation', 'probleme', 'tran
 const CLOSE_LABEL: Record<Lang, string> = { fr: 'prêt à closer', en: 'ready to close' };
 const CHECKPOINT_LABEL: Record<Lang, string> = { fr: 'Checkpoint', en: 'Checkpoint' };
 const EXAMPLE_LABEL: Record<Lang, string> = { fr: 'exemple (reformule-le)', en: 'example (make it yours)' };
+// Tooltips des boutons d'en-tête (réduire / fermer).
+const TIP_MIN: Record<Lang, string> = { fr: 'Réduire', en: 'Minimize' };
+const TIP_CLOSE: Record<Lang, string> = { fr: 'Fermer', en: 'Close' };
 
 // Rappel affiché sous le coaching quand le profil serveur du People n'est pas
 // encore complet : la conversation est analysée, mais l'engagement/profil reste
@@ -90,6 +95,11 @@ class CoachPanel {
   private onCta: (() => void) | null = null; // action du bouton de la suggestion
   private lastSig = ''; // signature du contenu rendu → évite de réécrire (et de
                         //  refermer l'exemple) à chaque tick identique.
+  private panelEl: HTMLDivElement | null = null;  // contenu complet (patché par setHtml)
+  private bubbleEl: HTMLDivElement | null = null; // icône flottante = état réduit
+  private minimized = false; // réduit en bulle (persiste sur la session)
+  // Drag en cours : positions de départ + drapeau « a bougé » (distingue clic/drag).
+  private drag: { sx: number; sy: number; ox: number; oy: number; moved: boolean } | null = null;
 
   /** Contact actuellement ciblé par le panneau (null si masqué). */
   currentTarget(): string | null {
@@ -101,12 +111,17 @@ class CoachPanel {
    * Idempotent : réutilise le DOM existant et ne fait que patcher le contenu
    * (pas de flash à chaque tick).
    */
-  render(username: string, coaching: SettingCoaching, lang: Lang, incompleteProfile = false): void {
+  render(username: string, coaching: SettingCoaching, _uiLang: Lang, incompleteProfile = false): void {
     if (!this.root) this.mount();
     this.target = username;
     this.onCta = null; // mode coaching : pas de bouton d'action
     if (this.dismissed.has(username.toLowerCase())) { this.displayNone(); return; }
 
+    // Le panneau suit la langue de la CONVERSATION (détectée des messages du
+    // prospect), PAS la langue d'UI : le checkpoint et l'exemple sont déjà rédigés
+    // dans cette langue (message à lui envoyer). Aligner les libellés (« exemple »,
+    // momentum, closing) dessus évite un panneau mi-FR / mi-EN.
+    const lang = coaching.lang;
     const { phase, phaseLabel } = coaching;
     const { momentum, nextStep, closeProbability, priority } = coaching.summary;
 
@@ -140,7 +155,7 @@ class CoachPanel {
     this.lastSig = sig;
 
     this.setHtml(`
-      ${this.header(username)}
+      ${this.header(username, lang)}
 
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
         <span style="display:flex;align-items:center;gap:5px;">${dots}</span>
@@ -201,7 +216,7 @@ class CoachPanel {
     this.lastSig = sig;
 
     this.setHtml(`
-      ${this.header(username)}
+      ${this.header(username, lang)}
       <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:${s.cta ? '12px' : '2px'};">
         <span style="color:${ACCENT};display:flex;flex-shrink:0;margin-top:1px;">${icon}</span>
         <div>
@@ -215,13 +230,18 @@ class CoachPanel {
     this.show();
   }
 
-  /** En-tête commun (point Waler + @username + croix de fermeture). */
-  private header(username: string): string {
-    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+  /**
+   * En-tête commun (point Waler + @username + réduire + fermer). Sert aussi de
+   * poignée de déplacement (`data-waler-coach-drag`) ; les boutons sont marqués
+   * `data-waler-coach-btn` pour ne PAS déclencher de drag au clic.
+   */
+  private header(username: string, lang: Lang): string {
+    return `<div data-waler-coach-drag style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:move;user-select:none;">
         <span style="display:flex;align-items:center;">${ICON_DOT}</span>
         <span style="font-weight:600;font-size:13px;letter-spacing:0.02em;color:${ACCENT};flex:1;">Waler</span>
         <span style="font-size:11px;color:rgba(255,255,255,0.35);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@${this.esc(username)}</span>
-        <button data-waler-coach-close style="background:none;border:none;color:rgba(255,255,255,0.35);cursor:pointer;padding:2px;display:flex;line-height:0;">${ICON_X}</button>
+        <button data-waler-coach-min data-waler-coach-btn title="${TIP_MIN[lang]}" style="background:none;border:none;color:rgba(255,255,255,0.35);cursor:pointer;padding:2px;display:flex;line-height:0;">${ICON_MINIMIZE}</button>
+        <button data-waler-coach-close data-waler-coach-btn title="${TIP_CLOSE[lang]}" style="background:none;border:none;color:rgba(255,255,255,0.35);cursor:pointer;padding:2px;display:flex;line-height:0;">${ICON_X}</button>
       </div>`;
   }
 
@@ -255,34 +275,67 @@ class CoachPanel {
   }
 
   private mount(): void {
+    // Conteneur positionné (fixe) : porte le déplacement (left/top). Le contenu
+    // et la bulle réduite sont des enfants → survivent aux re-render de setHtml.
     this.root = document.createElement('div');
     this.root.id = 'waler-coach-panel';
     this.root.style.cssText = `
       position: fixed;
       bottom: 24px;
       right: 24px;
+      z-index: 999998;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    `;
+
+    // Panneau complet (mis à jour par setHtml).
+    this.panelEl = document.createElement('div');
+    this.panelEl.style.cssText = `
       background: #000;
       border: 1px solid rgba(2,201,80,0.18);
       color: #fff;
       padding: 14px 16px;
       border-radius: 12px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px rgba(2,201,80,0.06);
-      z-index: 999998;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       width: 288px;
       animation: waler-coach-in 0.25s ease-out;
     `;
+
+    // Bulle flottante = état réduit. Cliquable pour ré-ouvrir, déplaçable.
+    this.bubbleEl = document.createElement('div');
+    this.bubbleEl.setAttribute('data-waler-coach-drag', '');
+    this.bubbleEl.setAttribute('data-waler-coach-bubble', '');
+    this.bubbleEl.style.cssText = `
+      display: none;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #000;
+      border: 1px solid rgba(2,201,80,0.35);
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      animation: waler-coach-pulse 2.4s ease-in-out infinite;
+    `;
+    this.bubbleEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="${ACCENT}" stroke="none"><circle cx="12" cy="12" r="10"/></svg>`;
+
+    this.root.appendChild(this.panelEl);
+    this.root.appendChild(this.bubbleEl);
+
     if (!document.getElementById('waler-coach-style')) {
       const style = document.createElement('style');
       style.id = 'waler-coach-style';
       style.textContent = `
         @keyframes waler-coach-in { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes waler-coach-pulse { 0%,100% { box-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 0 0 1px rgba(2,201,80,0.08); } 50% { box-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 0 0 4px rgba(2,201,80,0.18); } }
       `;
       document.head.appendChild(style);
     }
     document.body.appendChild(this.root);
+
     this.root.addEventListener('click', (e) => {
       const el = e.target as HTMLElement | null;
+      // Réduire → bulle flottante (garde le contexte, libère l'écran).
+      if (el?.closest('[data-waler-coach-min]')) { this.minimize(); return; }
       // Croix → fermer POUR CE CONTACT (le coaching réapparaît sur les autres).
       if (el?.closest('[data-waler-coach-close]')) {
         if (this.target) this.dismissed.add(this.target.toLowerCase());
@@ -294,10 +347,84 @@ class CoachPanel {
         this.onCta?.();
       }
     });
+
+    // Déplacement : via l'en-tête (panneau) ou la bulle réduite.
+    this.root.addEventListener('pointerdown', this.onPointerDown);
+  }
+
+  // Démarre un drag depuis une poignée (`data-waler-coach-drag`), sauf sur un
+  // bouton d'en-tête. Passe l'ancrage en top/left pour bouger librement.
+  private onPointerDown = (e: PointerEvent): void => {
+    const el = e.target as HTMLElement | null;
+    if (el?.closest('[data-waler-coach-btn]')) return; // boutons → clic, pas drag
+    if (!el?.closest('[data-waler-coach-drag]') || !this.root) return;
+    const r = this.root.getBoundingClientRect();
+    this.root.style.left = `${r.left}px`;
+    this.root.style.top = `${r.top}px`;
+    this.root.style.right = 'auto';
+    this.root.style.bottom = 'auto';
+    this.drag = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false };
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
+    e.preventDefault();
+  };
+
+  private onPointerMove = (e: PointerEvent): void => {
+    if (!this.drag || !this.root) return;
+    const dx = e.clientX - this.drag.sx;
+    const dy = e.clientY - this.drag.sy;
+    if (Math.abs(dx) + Math.abs(dy) > 3) this.drag.moved = true;
+    const w = this.root.offsetWidth;
+    const h = this.root.offsetHeight;
+    const left = Math.max(4, Math.min(this.drag.ox + dx, window.innerWidth - w - 4));
+    const top = Math.max(4, Math.min(this.drag.oy + dy, window.innerHeight - h - 4));
+    this.root.style.left = `${left}px`;
+    this.root.style.top = `${top}px`;
+  };
+
+  private onPointerUp = (e: PointerEvent): void => {
+    window.removeEventListener('pointermove', this.onPointerMove);
+    window.removeEventListener('pointerup', this.onPointerUp);
+    const moved = this.drag?.moved;
+    this.drag = null;
+    // Clic (sans déplacement) sur la bulle réduite → ré-ouvrir le panneau.
+    if (!moved && (e.target as HTMLElement | null)?.closest('[data-waler-coach-bubble]')) {
+      this.expand();
+    }
+  };
+
+  /** Réduit le panneau en bulle flottante (état conservé sur la session). */
+  private minimize(): void {
+    this.minimized = true;
+    this.syncMinimized();
+  }
+
+  /** Ré-ouvre le panneau complet depuis la bulle. */
+  private expand(): void {
+    this.minimized = false;
+    this.syncMinimized();
+  }
+
+  /** Bascule l'affichage panneau ↔ bulle selon `this.minimized`. */
+  private syncMinimized(): void {
+    if (this.panelEl) this.panelEl.style.display = this.minimized ? 'none' : 'block';
+    if (this.bubbleEl) this.bubbleEl.style.display = this.minimized ? 'flex' : 'none';
+    if (!this.minimized) this.clampToViewport();
+  }
+
+  /** Re-borne le panneau dans le viewport (utile après ré-ouverture près d'un bord). */
+  private clampToViewport(): void {
+    if (!this.root || !this.root.style.left) return; // pas déplacé → ancrage bas/droite intact
+    const w = this.root.offsetWidth;
+    const h = this.root.offsetHeight;
+    const left = Math.max(4, Math.min(parseFloat(this.root.style.left), window.innerWidth - w - 4));
+    const top = Math.max(4, Math.min(parseFloat(this.root.style.top), window.innerHeight - h - 4));
+    this.root.style.left = `${left}px`;
+    this.root.style.top = `${top}px`;
   }
 
   private setHtml(html: string): void {
-    if (this.root) this.root.innerHTML = html;
+    if (this.panelEl) this.panelEl.innerHTML = html;
   }
 
   private displayNone(): void {
@@ -307,6 +434,7 @@ class CoachPanel {
   private show(): void {
     if (this.target && this.dismissed.has(this.target.toLowerCase())) return; // fermé pour ce contact
     if (this.root) this.root.style.display = 'block';
+    this.syncMinimized();
   }
 
   /** Masque le panneau (changement de thread, arrêt global, contexte invalidé). */

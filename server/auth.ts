@@ -128,6 +128,26 @@ export function getActiveAccount(req: Request): number | null {
 
 export function setActiveAccount(req: Request, accountId: number): void {
   req.session.activeAccountId = accountId;
+  // Persisté sur le login owner pour survivre à une déconnexion/reconnexion
+  // (best-effort : ne bloque pas la bascule si l'écriture échoue).
+  const ownerId = getCurrentUser(req);
+  if (ownerId) {
+    db.update(users).set({ lastActiveAccountId: accountId }).where(eq(users.id, ownerId)).catch((err) => {
+      console.error("Persist lastActiveAccountId error:", err);
+    });
+  }
+}
+
+/**
+ * Restaure en session le dernier compte Instagram actif du login owner
+ * (persisté via `setActiveAccount`). À appeler juste après `setCurrentUser`
+ * lors du login, pour éviter de retomber sur le compte owner par défaut.
+ */
+export async function restoreActiveAccount(req: Request, ownerId: number): Promise<void> {
+  const owner = await getUserById(ownerId);
+  if (owner?.lastActiveAccountId && (await isAccountOwnedBy(owner.lastActiveAccountId, ownerId))) {
+    req.session.activeAccountId = owner.lastActiveAccountId;
+  }
 }
 
 /**

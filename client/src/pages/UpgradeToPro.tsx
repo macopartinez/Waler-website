@@ -5,12 +5,13 @@ import {
   Crown, Check, X, ArrowLeft, Clock, Sparkles, Zap, Shield,
   Users, TrendingUp, BarChart3, FileText, Target, Calendar,
   Award, Briefcase, Star,
-  Thermometer, Activity
+  Thermometer, Activity, Loader2
 } from 'lucide-react';
 import { GlassText } from '@/components/GlassText';
 import { RadarBackground } from '@/components/RadarBackground';
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import { useOfferCountdown, yearlyStandardPrice } from '@/hooks/use-offer-countdown';
+import { useOfferCountdown, resolveYearlyPrice, yearlyStandardPrice } from '@/hooks/use-offer-countdown';
+import { usePlans } from '@/hooks/use-subscription';
 import { useLanguage, interpolate } from '@/contexts/LanguageContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
@@ -24,6 +25,7 @@ export default function UpgradeToPro() {
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('yearly');
   const [currentBillingPeriod] = useState<BillingPeriod>('yearly'); // User's current billing period
   const timeLeft = useOfferCountdown();
+  const { data: apiPlans, isLoading: plansLoading } = usePlans();
 
   const formatTime = (value: number) => value.toString().padStart(2, '0');
 
@@ -40,28 +42,37 @@ export default function UpgradeToPro() {
   // 12× le prix mensuel (aucune économie). Les prix mensuels ne changent pas.
   const offerActive = timeLeft.offerActive;
 
-  const premiumMonthly = 4.99;
-  const proMonthly = 19.99;
-  const premiumYearlyOffer = 47.99;
-  // Prix annuel « offre » remisé (~20%), aligné sur le serveur/Stripe
-  // (plans.ts : 19199 centimes). 12× le mensuel = 239.88 = aucune remise.
-  const proYearlyOffer = 191.99;
+  // Prix réels synchronisés avec Stripe via /api/plans (server/plans.ts fetch
+  // les Price objects live) — on ne hardcode plus de montants côté client.
+  const basePlan = apiPlans?.find((p) => p.name === 'base');
+  const proPlan = apiPlans?.find((p) => p.name === 'pro');
+
+  const premiumMonthly = basePlan ? basePlan.priceMonthly / 100 : 0;
+  const proMonthly = proPlan ? proPlan.priceMonthly / 100 : 0;
+  const premiumYearlyOffer = basePlan ? basePlan.priceYearly / 100 : 0;
+  const proYearlyOffer = proPlan ? proPlan.priceYearly / 100 : 0;
   const premiumYearlyStandard = yearlyStandardPrice(premiumMonthly);
   const proYearlyStandard = yearlyStandardPrice(proMonthly);
 
   const premiumPrice =
     billingPeriod === 'monthly'
       ? premiumMonthly
-      : offerActive
-        ? premiumYearlyOffer
-        : premiumYearlyStandard;
+      : resolveYearlyPrice(premiumMonthly, premiumYearlyOffer, offerActive);
   const proPrice =
     billingPeriod === 'monthly'
       ? proMonthly
-      : offerActive
-        ? proYearlyOffer
-        : proYearlyStandard;
-  const yearlyDiscount = Math.round((1 - proYearlyOffer / (proMonthly * 12)) * 100);
+      : resolveYearlyPrice(proMonthly, proYearlyOffer, offerActive);
+  const yearlyDiscount = proYearlyStandard > 0
+    ? Math.round((1 - proYearlyOffer / proYearlyStandard) * 100)
+    : 0;
+
+  if (plansLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#02c950]" />
+      </div>
+    );
+  }
 
   const premiumFeatures = t.upgradeToPro.premiumFeatures;
 
