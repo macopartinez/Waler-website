@@ -724,6 +724,17 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: a
         break;
       }
 
+      case 'ADD_PRO_PERSON': {
+        // Ajoute la personne aux People (circle_members) sur le compte actif, en
+        // résolvant le username Instagram du compte comme pour UPDATE_CONTACT_SCORE.
+        const activeStoreA = await chrome.storage.local.get('activeDsUserId');
+        const regA = await accountGet('accountRegistry');
+        const accountUsernameA = regA.accountRegistry?.accounts?.[activeStoreA.activeDsUserId]?.igUsername;
+        const added = await addProPerson(message.username, accountUsernameA);
+        sendResponse({ success: added });
+        break;
+      }
+
       case 'ANALYZE_DMS':
         // Score DM quantitatif côté serveur (après SYNC_DMS)
         {
@@ -1454,6 +1465,34 @@ async function updateContactScore(
     }
   } catch (error) {
     console.error('Error updating contact score:', error);
+  }
+}
+
+/**
+ * Ajoute une personne aux People (insert dans circle_members côté serveur, via
+ * /api/pro/analyze-person) puis marque l'analyse en cours. Utilisé par la
+ * suggestion « Ajouter à People » du panneau de coaching : la personne doit
+ * exister dans circle_members pour que le score/coaching y soit reflété (sinon
+ * le UPDATE circle_members de analyze-contact est un no-op → score orphelin).
+ * L'analyse de conversation elle-même reste faite par l'extension (start()).
+ */
+async function addProPerson(username: string, accountUsername?: string): Promise<boolean> {
+  try {
+    const response = await fetch(API_BASE + '/api/pro/analyze-person', {
+      method: 'POST',
+      credentials: 'include', // session du dashboard
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instagramUsername: username, accountUsername }),
+    });
+    if (!response.ok) {
+      console.error('❌ addProPerson: HTTP', response.status);
+      return false;
+    }
+    console.log(`➕ People: @${username} ajouté (compte ${accountUsername || 'session'})`);
+    return true;
+  } catch (error) {
+    console.error('Error adding pro person:', error);
+    return false;
   }
 }
 

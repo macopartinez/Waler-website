@@ -503,6 +503,13 @@ class InstagramTracker {
       if (usernames.length > 0) {
         this.proCollector.startLiveWatch(usernames);
       }
+      // Profils pas encore collectés (profileCollectedAt null) → le panneau rappelle
+      // qu'il reste l'analyse complète (engagement) pour remplir les stats.
+      const incomplete = people
+        .filter((p: any) => !p.profileCollectedAt)
+        .map((p: any) => p.memberUsername)
+        .filter(Boolean);
+      this.proCollector.setIncompleteProfiles(incomplete);
     } catch (error) {
       console.error('Error starting pro live watch:', error);
     }

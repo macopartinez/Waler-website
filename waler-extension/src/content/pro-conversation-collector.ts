@@ -19,6 +19,7 @@ import { ScoringEngine, type Contact } from './scoring-engine.js';
 import { DMAnalyzer, type Conversation, type ConversationMessage } from './dm-analyzer.js';
 import { ConversationDynamicsAnalyzer } from './conversation-dynamics.js';
 import { SettingCoach } from './setting-coach.js';
+import CoachPanel, { type SuggestionKind } from './coach-panel.js';
 import { getScanBudget, isBackoffActive } from './scan-budget.js';
 
 export interface ProRefusal {
@@ -70,6 +71,8 @@ export class ProConversationCollector {
   private analyzer = new DMAnalyzer();
   private dynamics = new ConversationDynamicsAnalyzer();
   private settingCoach = new SettingCoach();
+  /** Panneau de coaching live in-page (persistant, ciblé sur le contact ouvert). */
+  private coachPanel = new CoachPanel();
 
   constructor(overlay: ScanOverlay) {
     this.overlay = overlay;
@@ -659,9 +662,18 @@ export class ProConversationCollector {
     //      - `settingSummary` = qualification (prochaine question, faits, manques) ;
     //      - `advice`         = dynamique relationnelle (comportement) uniquement.
     const coaching = this.settingCoach.analyze(messages, dyn);
-    const storedLang = await chrome.storage.local.get('walerLanguage');
-    const lang: 'en' | 'fr' = storedLang.walerLanguage === 'fr' ? 'fr' : 'en';
+    const stored = await chrome.storage.local.get(['walerLanguage', 'proShowLiveCoach']);
+    const lang: 'en' | 'fr' = stored.walerLanguage === 'fr' ? 'fr' : 'en';
     const advice = this.dynamics.buildAdvice(dyn, lang);
+
+    // Coaching live in-page : on rend le panneau tant qu'on est sur le thread de
+    // ce contact. Lecture pure (le coaching est déjà calculé) → zéro action IG.
+    // Réglage `proShowLiveCoach` (défaut true) : l'utilisateur peut le couper.
+    if (stored.proShowLiveCoach !== false && this.isOnThread()) {
+      // Profil incomplet → le coaching s'affiche + un rappel « analyse complète »
+      // (l'engagement/profil, hors conversation, reste à collecter).
+      this.coachPanel.render(username, coaching, lang, this.incompleteProfiles.has(username.toLowerCase()));
+    }
 
     console.log(
       `📊 [Pro] @${username} — dms=${breakdown.dms} (serveur ${serverDmScore} + mots-clés ${keywordTone}), ` +
@@ -1102,6 +1114,7 @@ export class ProConversationCollector {
     console.log('⏹ [Pro] Arrêt demandé — interruption de l\'analyse en cours.');
     this.manualCaptureRunning = false;
     this.overlay.showError('Analysis stopped');
+    this.coachPanel.hide();
     void this.clearState();
   }
 
@@ -1206,6 +1219,10 @@ export class ProConversationCollector {
 
   private liveWatchStarted = false;
   private livePeople = new Set<string>();
+  /** People dont le profil serveur n'est pas encore collecté (profileCollectedAt
+   *  null) → l'analyse d'engagement reste à faire pour remplir les stats manquantes.
+   *  Sert à afficher le rappel « analyse complète » sous le coaching. */
+  private incompleteProfiles = new Set<string>();
   private liveLastAnalyzed = new Map<string, number>();
   /** Signature du dernier état analysé par thread (détection de nouveau message). */
   private liveLastSignature = new Map<string, string>();
@@ -1213,6 +1230,9 @@ export class ProConversationCollector {
   private readonly LIVE_THROTTLE_MS = 30 * 1000; // 30 s
   /** Garde-fou anti-rafale : délai mini entre 2 analyses d'un même thread. */
   private readonly LIVE_MIN_GAP_MS = 8 * 1000; // 8 s
+  /** En dessous de ce nombre de messages fusionnés SANS baseline stockée, le
+   *  contexte est trop mince pour coacher → on suggère une analyse complète. */
+  private readonly LIVE_MIN_CONTEXT = 6;
   /** Id de l'intervalle live (pour l'arrêter si le contexte est invalidé). */
   private liveIntervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -1236,6 +1256,7 @@ export class ProConversationCollector {
         if (this.isContextInvalidated(e)) {
           if (this.liveIntervalId) clearInterval(this.liveIntervalId);
           this.liveIntervalId = null;
+          this.coachPanel.hide();
           console.warn('[Pro] Live watch arrêté : contexte d\'extension invalidé (recharge la page Instagram).');
           return;
         }
@@ -1264,16 +1285,29 @@ export class ProConversationCollector {
     this.livePeople = new Set(peopleUsernames.map((u) => u.toLowerCase()));
   }
 
+  /** People au profil incomplet (analyse d'engagement/profil pas encore faite). */
+  setIncompleteProfiles(usernames: string[]): void {
+    this.incompleteProfiles = new Set(usernames.map((u) => u.toLowerCase()));
+  }
+
   private async liveTick(): Promise<void> {
     // Ne pas interférer avec une analyse manuelle en cours.
     if (this.running) return;
-    if (!this.isOnThread()) return;
+    // Quitté le thread → le panneau de coaching n'a plus de contexte : on le masque.
+    if (!this.isOnThread()) { this.coachPanel.hide(); return; }
 
     const username = this.getThreadContactUsername();
-    if (!username) return;
+    if (!username) { this.coachPanel.hide(); return; }
 
     const key = username.toLowerCase();
-    if (!this.livePeople.has(key)) return;
+    // Contact non suivi (pas dans People) → analyser ne remonterait nulle part,
+    // donc on suggère de l'ajouter dans l'app plutôt que de masquer le panneau.
+    if (!this.livePeople.has(key)) { void this.showSuggestion(username, 'not_tracked'); return; }
+
+    // Changement de conversation : masquer l'ancien coaching jusqu'à ce que le
+    // nouveau contact soit ré-analysé (évite d'afficher le contact précédent).
+    const shown = this.coachPanel.currentTarget();
+    if (shown && shown.toLowerCase() !== key) this.coachPanel.hide();
 
     const container = document.querySelector('div[role="grid"]') as HTMLElement | null;
     const scopeEl = container || (document.querySelector('main') as HTMLElement | null);
@@ -1319,12 +1353,64 @@ export class ProConversationCollector {
     const history = await this.fetchStoredHistory(username);
     const messages = this.mergeHistory(history, visible);
 
+    // Pas de baseline stockée ET conversation visible trop mince → le coaching
+    // serait vide/trompeur : on suggère une analyse complète (qui scrolle tout
+    // l'historique) plutôt que d'afficher un panneau creux.
+    if (history.length === 0 && messages.length < this.LIVE_MIN_CONTEXT) {
+      void this.showSuggestion(username, 'needs_analysis');
+      return;
+    }
+
     const seenReceipt = extractor.detectSeenReceipt(scopeEl);
     await this.persistAnalysis(username, messages, seenReceipt);
     console.log(
       `✅ [Pro] Stats live mises à jour pour @${username} ` +
         `(${visible.length} visibles + ${history.length} stockés → ${messages.length} fusionnés)`
     );
+  }
+
+  /**
+   * Affiche une suggestion dans le panneau (respecte le réglage `proShowLiveCoach`
+   * et la langue). Pour `needs_analysis`, le bouton lance une analyse complète du
+   * contact (le score se reflétera dans People). `not_tracked` est informatif.
+   */
+  private async showSuggestion(username: string, kind: SuggestionKind): Promise<void> {
+    const stored = await chrome.storage.local.get(['walerLanguage', 'proShowLiveCoach']);
+    if (stored.proShowLiveCoach === false) { this.coachPanel.hide(); return; }
+    const lang: 'en' | 'fr' = stored.walerLanguage === 'fr' ? 'fr' : 'en';
+    // needs_analysis (déjà dans People) → lance l'analyse directement.
+    // not_tracked → ajoute d'abord aux People, PUIS lance l'analyse.
+    const onCta =
+      kind === 'needs_analysis'
+        ? () => { void this.start(username); }
+        : () => { void this.addPersonAndAnalyze(username); };
+    this.coachPanel.renderSuggestion(username, kind, lang, onCta);
+  }
+
+  /**
+   * Ajoute la personne aux People (circle_members) puis lance l'analyse complète
+   * de la conversation. L'ajout est nécessaire pour que le score/coaching soit
+   * rattaché (sinon score orphelin invisible) ; l'analyse, elle, navigue vers
+   * l'inbox Instagram (start()) — d'où « l'extension ouvre une page IG ».
+   */
+  private async addPersonAndAnalyze(username: string): Promise<void> {
+    this.overlay.show(`Adding @${username} to People…`);
+    try {
+      // Nom de profil résolu en amont : aide start() à localiser la ligne inbox
+      // (l'inbox affiche le nom, pas le @username). Best-effort.
+      const fullName = await this.resolveProfileName(username);
+      const resp = (await chrome.runtime.sendMessage({ type: 'ADD_PRO_PERSON', username })) as any;
+      if (!resp?.success) {
+        this.overlay.showError('Could not add to People');
+        return;
+      }
+      // start() navigue vers l'inbox (reload du content script) → l'overlay et le
+      // panneau sont recréés au retour ; la personne est désormais suivie.
+      await this.start(username, fullName);
+    } catch (e) {
+      console.error('[Pro] addPersonAndAnalyze error', e);
+      this.overlay.showError('Could not start analysis');
+    }
   }
 
   /**

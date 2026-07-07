@@ -515,6 +515,12 @@
             <span data-i18n="pro.alwaysAsk">Always ask before opening a conversation</span>
           </label>
 
+          <!-- Panneau de coaching live in-page (opt-out : coché par défaut). Lu par pro-conversation-collector.ts. -->
+          <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:hsl(240,5%,64.9%); margin-bottom:12px; cursor:pointer;">
+            <input type="checkbox" id="pro-show-coach" style="width:14px; height:14px; accent-color:#02c950; cursor:pointer; flex-shrink:0;">
+            <span data-i18n="pro.showCoach">Show live coaching in the conversation</span>
+          </label>
+
           <button class="btn btn-primary" id="pro-engagement-btn" style="width: 100%; margin-bottom: 12px; font-size: 13px;"><span data-icon="search"></span> <span data-i18n="pro.analyzeEngagement">Analyze engagement (posts)</span></button>
 
           <div id="pro-people-loading" style="display:flex; align-items:center; justify-content:center; gap:8px; padding: 20px; color: hsl(240,5%,64.9%); font-size: 13px;"><span class="spinner-sm"></span> <span data-i18n="common.loadingShort">Loading…</span></div>

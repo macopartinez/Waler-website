@@ -586,6 +586,18 @@ function initProSection(isPro: boolean) {
       };
     }
 
+    // Coaching live in-page : opt-out (coché par défaut → seul `false` explicite
+    // le désactive). Même clé lue par pro-conversation-collector.ts.
+    const showCoachBox = document.getElementById('pro-show-coach') as HTMLInputElement | null;
+    if (showCoachBox) {
+      void chrome.storage.local.get(PRO_SHOW_COACH_KEY).then((s) => {
+        showCoachBox.checked = s[PRO_SHOW_COACH_KEY] !== false;
+      });
+      showCoachBox.onchange = () => {
+        void chrome.storage.local.set({ [PRO_SHOW_COACH_KEY]: showCoachBox.checked });
+      };
+    }
+
     void populateProAccountSelect();
   } else {
     upsell.style.display = 'block';
@@ -650,6 +662,9 @@ const PRO_ACCOUNT_KEY = 'proSelectedAccount';
 // Réglage « toujours demander avant d'ouvrir une conversation » (filet de sécurité
 // indépendant de la détection non-lu). Lu par pro-conversation-collector.ts.
 const PRO_ALWAYS_ASK_KEY = 'proAlwaysAskBeforeOpen';
+// Réglage « afficher le coaching live » (opt-out, défaut activé). Lu par
+// pro-conversation-collector.ts pour rendre ou non le panneau in-page.
+const PRO_SHOW_COACH_KEY = 'proShowLiveCoach';
 
 /**
  * Remplit le sélecteur « Compte analysé » de la section Pro à partir des comptes
